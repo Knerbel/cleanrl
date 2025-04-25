@@ -1,6 +1,10 @@
 import pygame
 from pygame.locals import *
 
+from fireboy_and_watergirl.board import Board
+from fireboy_and_watergirl.character import Character
+from fireboy_and_watergirl.stars import Stars
+
 
 class Game:
     # game meta functions
@@ -49,57 +53,6 @@ class Game:
         right_cords = (430, 150)
         self.display.blit(level_select.left_player, left_cords)
         self.display.blit(level_select.right_player, right_cords)
-
-    def user_select_level(self, level_select, controller):
-        """
-        Allow for user to select level.
-
-        As user clicks up and down arrows, move level indicator up and down.
-        When user clicks <enter>, return which level they select.
-
-        Args:
-            level_select::level_select class object
-                A class object that contains the images for the level selection
-                screen.
-            controller::controller class object
-                A controller object that allows access to keyboard inputs
-        """
-        # create current level selected index
-        level_index = 0
-        # create dictionary to map index to level name
-        level_dict = {
-            0: "level1",
-            1: "level2",
-            2: "level3",
-            3: "level1",
-            4: "level1"
-        }
-        while True:
-            # draw the level selection screen
-            self.draw_level_screen(level_select)
-            # get all pygame inputs
-            events = pygame.event.get()
-            # if player presses <down>
-            if controller.press_key(events, K_DOWN):
-                # move index down one
-                level_index += 1
-                # wrap around if goes past end
-                if level_index == 5:
-                    level_index = 0
-            # if player presses <up>
-            if controller.press_key(events, K_UP):
-                # move index up one
-                level_index -= 1
-                # wrap around if goes past end
-                if level_index == -1:
-                    level_index = 4
-            # draw indicator around the currently selected level
-            self.draw_level_select_indicator(level_select, level_index)
-
-            # if user clicks enter
-            if controller.press_key(events, K_RETURN):
-                # return the name of the level using dict
-                return level_dict[level_index]
 
     def refresh_window(self):
         """
@@ -153,7 +106,7 @@ class Game:
         """
         self.display.blit(board.get_background(), (0, 0))
 
-    def draw_board(self, board):
+    def draw_board(self, board: Board):
         """
         Draw the board.
 
@@ -362,7 +315,7 @@ class Game:
                 return True
         return False
 
-    def check_for_star_collected(self, stars, players):
+    def check_for_star_collected(self, stars: list[Stars], players: list[Character]):
         """
         Check if any player has collected a star.
 

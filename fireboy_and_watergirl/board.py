@@ -42,6 +42,12 @@ class Board:
         """
         return self._game_map
 
+    def set_game_map(self, game_map):
+        """
+        Set game map to new game map
+        """
+        self._game_map = game_map
+
     def load_images(self):
         """
         Load all images needed to draw level background and platforms.
@@ -53,26 +59,27 @@ class Board:
             './fireboy_and_watergirl/data/board_textures/wall.png')
         # create dictionary that maps a string to a board texture
         self._board_textures = {
-            # "111": pygame.image.load('data/board_textures/stone.png'),
-            # "112": pygame.image.load('data/board_textures/stone.png'),
-            # "113": pygame.image.load('data/board_textures/stone.png'),
-            # "114": pygame.image.load('data/board_textures/stone.png'),
-            # "121": pygame.image.load('data/board_textures/stone.png'),
-            # "122": pygame.image.load('data/board_textures/stone.png'),
-            # "123": pygame.image.load('data/board_textures/stone.png'),
-            # "124": pygame.image.load('data/board_textures/stone.png'),
             "2": pygame.image.load('./fireboy_and_watergirl/data/board_textures/lava.png'),
             "3": pygame.image.load('./fireboy_and_watergirl/data/board_textures/water.png'),
             "4": pygame.image.load('./fireboy_and_watergirl/data/board_textures/goo.png'),
 
             # new codes
             "S": pygame.image.load('./fireboy_and_watergirl/data/board_textures/stone.png'),
-            "L": pygame.image.load('./fireboy_and_watergirl/data/board_textures/lava.png'),
             "W": pygame.image.load('./fireboy_and_watergirl/data/board_textures/water.png'),
+            "L": pygame.image.load('./fireboy_and_watergirl/data/board_textures/lava.png'),
             "G": pygame.image.load('./fireboy_and_watergirl/data/board_textures/goo.png'),
 
-            "f": pygame.image.load('./fireboy_and_watergirl/data/board_textures/fireboy_star.png'),
-            "w": pygame.image.load('./fireboy_and_watergirl/data/board_textures/watergirl_star.png'),
+            "f": pygame.image.load('./fireboy_and_watergirl/data/player_images/fireboy.png'),
+            "w": pygame.image.load('./fireboy_and_watergirl/data/player_images/watergirl.png'),
+
+            "a": pygame.image.load('./fireboy_and_watergirl/data/board_textures/fireboy_star.png'),
+            "b": pygame.image.load('./fireboy_and_watergirl/data/board_textures/watergirl_star.png'),
+
+            "P": pygame.image.load('./fireboy_and_watergirl/data/gates_and_plates/plate.png'),
+            "D": pygame.image.load('./fireboy_and_watergirl/data/door_images/door_frame.png'),
+
+            "A": pygame.image.load('./fireboy_and_watergirl/data/door_images/fire_door.png'),
+            "B": pygame.image.load('./fireboy_and_watergirl/data/door_images/water_door.png'),
         }
         # set the colorkey for each image in dictionary
         for texture in self._board_textures.keys():
@@ -100,7 +107,7 @@ class Board:
         for y, row in enumerate(self._game_map):
             for x, tile in enumerate(row):
                 # if block is not air or a liquid
-                if tile not in [' ', '0', '2', '3', '4', 'L', 'W', 'G']:
+                if tile not in [' ', '0', '2', '3', '4', 'L', 'W', 'G', 'a', 'b', 'P', 'D', 'A', 'B']:
                     # create a 16 x 16 rect and add it to the list
                     self._solid_blocks.append(
                         pygame.Rect(x * self.CHUNK_SIZE, y * self.CHUNK_SIZE,

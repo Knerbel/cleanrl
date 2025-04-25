@@ -53,7 +53,6 @@ class Stars:
                 continue  # Skip already collected stars
             for player in players:
                 if star.colliderect(player.rect):
-                    print("Star collected!")
                     self.is_collected = True
                     # Mark star as collected
 
