@@ -3,10 +3,10 @@ from pygame.locals import *
 
 
 class Gates:
-    def __init__(self, gate_location, plate_locations):
+    def __init__(self, gate_position, plate_position):
         # set initial locations and state of plates and gate
-        self.gate_location = gate_location
-        self.plate_locations = plate_locations
+        self.gate_position = gate_position
+        self.plate_position = plate_position
         self.plate_is_pressed = False
         self._gate_is_open = False
 
@@ -31,14 +31,14 @@ class Gates:
         Make pygame rects for gate and plates
         """
         # make rect for gate
-        x_cord = self.gate_location[0]
-        y_cord = self.gate_location[1]
+        x_cord = self.gate_position[0]
+        y_cord = self.gate_position[1]
         self._gate = pygame.Rect(x_cord, y_cord, self.gate_image.get_width(),
                                  self.gate_image.get_height())
 
         # create empty list to store plate locations
         self._plates = []
-        for location in self.plate_locations:
+        for location in self.plate_position:
             # add rect to list
             self._plates.append(
                 pygame.Rect(location[0], location[1],
@@ -50,12 +50,12 @@ class Gates:
         If person is on button, open gate, otherwise, keep gate closed
         """
         CHUNK_SIZE = 16
-        gate_x = self.gate_location[0]
-        gate_y = self.gate_location[1]
+        gate_x = self.gate_position[0]
+        gate_y = self.gate_position[1]
         # if plate is pressed and gate is not open
         if self.plate_is_pressed and not self._gate_is_open:
             # set new gate location
-            self.gate_location = (gate_x, gate_y - 2 * CHUNK_SIZE)
+            self.gate_position = (gate_x, gate_y - 2 * CHUNK_SIZE)
             # move gate
             self._gate.y -= 2 * CHUNK_SIZE
             # set gate as being open
@@ -63,7 +63,7 @@ class Gates:
         # if plate is not being pressed and gate is open
         if not self.plate_is_pressed and self._gate_is_open:
             # set new gate location
-            self.gate_location = (gate_x, gate_y + 2 * CHUNK_SIZE)
+            self.gate_position = (gate_x, gate_y + 2 * CHUNK_SIZE)
             # move gate
             self._gate.y += 2 * CHUNK_SIZE
             # set gate as being closed

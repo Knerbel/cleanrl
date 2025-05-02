@@ -3,12 +3,14 @@ import sys
 import pygame
 from pygame.locals import *
 
+from fireboy_and_watergirl.character import Character
+
 
 class Controller:
     def __init__(self):
         pass
 
-    def control_player(self, events, player):
+    def control_player(self, events, player: list[Character]):
         """
         Take keyboard inputs and update player motion variables.
 

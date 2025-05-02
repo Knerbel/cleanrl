@@ -28,8 +28,8 @@ class Doors:
         """
         Create pygame rect for the door
         """
-        x_cord = self.door_location[0]
-        y_cord = self.door_location[1]
+        x_cord = self.position[0]
+        y_cord = self.position[1]
         self._rect = pygame.Rect(x_cord, y_cord, self.door_image.get_width(),
                                  self.door_image.get_height())
 
@@ -53,12 +53,12 @@ class Doors:
         """
         # set door opening/closing speed
         DOOR_SPEED = 1.5
-        door_x = self.door_location[0]
-        door_y = self.door_location[1]
+        door_x = self.position[0]
+        door_y = self.position[1]
         # if there is a player at the door and the door isn't open yet
         if self.player_at_door and not self._door_open:
             # move the door up
-            self.door_location = (door_x, door_y - DOOR_SPEED)
+            self.position = (door_x, door_y - DOOR_SPEED)
             # update internal measure of door height
             self._height_raised += DOOR_SPEED
             # if door has raised 31 pixels
@@ -68,7 +68,7 @@ class Doors:
         # if there is not a player at door and the door as fully open
         elif not self.player_at_door and self._height_raised > 0:
             # move the door down
-            self.door_location = (door_x, door_y + DOOR_SPEED)
+            self.position = (door_x, door_y + DOOR_SPEED)
             # update internal measure of door height
             self._height_raised -= DOOR_SPEED
             # set the door as being not being open
@@ -78,18 +78,18 @@ class Doors:
         """
         Return the position of the door
         """
-        return self.door_location
+        return self.position
 
 
 class FireDoor(Doors):
-    def __init__(self, door_location):
+    def __init__(self, position):
         CHUNK_SIZE = 16
         # set door location as input door location
-        self.door_location = door_location
+        self.position = position
         # set door background location as the same as the door
-        self.background_location = door_location
+        self.background_location = position
         # since the frame is larger than the door, it has to be offset
-        self.frame_location = (door_location[0] - CHUNK_SIZE, door_location[1]
+        self.frame_location = (position[0] - CHUNK_SIZE, position[1]
                                - 2 * CHUNK_SIZE)
         # load unique door image
         self.door_image = pygame.image.load(
@@ -98,14 +98,14 @@ class FireDoor(Doors):
 
 
 class WaterDoor(Doors):
-    def __init__(self, door_location):
+    def __init__(self, position):
         CHUNK_SIZE = 16
         # set door location as input door location
-        self.door_location = door_location
+        self.position = position
         # set door background location as the same as the door
-        self.background_location = door_location
+        self.background_location = position
         # since the frame is larger than the door, it has to be offset
-        self.frame_location = (door_location[0] - CHUNK_SIZE, door_location[1]
+        self.frame_location = (position[0] - CHUNK_SIZE, position[1]
                                - 2 * CHUNK_SIZE)
         # load unique door image
         self.door_image = pygame.image.load(

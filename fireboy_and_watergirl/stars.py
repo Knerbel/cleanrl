@@ -3,14 +3,14 @@ from pygame.locals import *
 
 
 class Stars:
-    def __init__(self, star_location, player):
+    def __init__(self, postion, player):
         """
         Initialize the Stars class.
 
         Args:
             star_locations (list of tuples): List of (x, y) coordinates for the stars.
         """
-        self.star_location = star_location
+        self.postion = postion
         self.is_collected = False
         self._player = player
         self.load_images()
@@ -36,7 +36,7 @@ class Stars:
         Create pygame rects for the stars.
         """
         self._rect = (
-            pygame.Rect(self.star_location[0], self.star_location[1],
+            pygame.Rect(self.postion[0], self.postion[1],
                         self.star_image.get_width(),
                         self.star_image.get_height())
         )

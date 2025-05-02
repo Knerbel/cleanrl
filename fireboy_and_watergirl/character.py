@@ -3,9 +3,9 @@ from pygame.locals import *
 
 
 class Character:
-    def __init__(self, location):
+    def __init__(self, postion):
         self.rect = pygame.Rect(
-            location[0], location[1], self.image.get_width(),
+            postion[0], postion[1], self.image.get_width(),
             self.image.get_height())
         # motion
         self.moving_right = False
