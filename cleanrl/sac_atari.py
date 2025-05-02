@@ -24,14 +24,14 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 # Import your Fireboy and Watergirl environment to ensure it's registered
-import cleanrl.fireboy_and_wategirl_sac
+import cleanrl.fireboy_and_watergirl_sac
 
 
 @dataclass
 class Args:
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
     """the name of this experiment"""
-    seed: int = 2
+    seed: int = 1
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""

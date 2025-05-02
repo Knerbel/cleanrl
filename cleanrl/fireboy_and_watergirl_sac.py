@@ -10,7 +10,6 @@ from fireboy_and_watergirl.controller import GeneralController
 from fireboy_and_watergirl.doors import FireDoor, WaterDoor
 from fireboy_and_watergirl.game import Game
 from fireboy_and_watergirl.gates import Gates
-import time
 
 from fireboy_and_watergirl.stars import Stars
 
@@ -64,13 +63,13 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Load the level
         self._load_level()
 
-        level_height = 25
-        level_width = 34
-        board_size = 34 * 25
+        self.level_height = 25
+        self.level_width = 34
         self.observation_space = spaces.Box(
             low=0,
             high=255,
-            shape=(level_width, level_height, 3),  # Example: (34, 25, 1)
+            # Example: (34, 25, 1)
+            shape=(self.level_width, self.level_height, 3),
             dtype=np.uint8
         )
 
@@ -219,14 +218,14 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Update gates and doors
         for gate in self.gates:
-            gate_pos = gate.gate_location
+            gate_pos = gate.gate_position
             gate_x, gate_y = gate_pos[0] // 16, gate_pos[1] // 16
             # Ensure 'S' is not overwritten
             if updated_level_data[gate_y][gate_x] != 'S':
                 updated_level_data[gate_y][gate_x] = 'D'
 
         for door in self.doors:
-            door_pos = door.door_location
+            door_pos = door.position
             door_x, door_y = door_pos[0] // 16, door_pos[1] // 16
             # Ensure 'S' is not overwritten
             if updated_level_data[door_y][door_x] != 'S':
@@ -236,7 +235,7 @@ class FireboyAndWatergirlEnv(gym.Env):
                     updated_level_data[door_y][door_x] = 'B'
 
         for star in self.stars:
-            star_pos = star.star_location
+            star_pos = star.postion
             star_x, star_y = star_pos[0] // 16, star_pos[1] // 16
             # Ensure 'S' is not overwritten
             if updated_level_data[star_y][star_x] != 'S':
@@ -281,9 +280,9 @@ class FireboyAndWatergirlEnv(gym.Env):
         level_grid = np.array([[tile_mapping[tile] for tile in row]
                               for row in level_data], dtype=np.uint8)
 
-        # Resize the grid to 84x84
+        # Resize the grid
         resized_grid = cv2.resize(
-            level_grid, (25, 34), interpolation=cv2.INTER_NEAREST)
+            level_grid, (self.level_height, self.level_width), interpolation=cv2.INTER_NEAREST)
 
         # Duplicate the single channel to create an RGB image
         rgb_image = np.stack(
@@ -298,6 +297,15 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Decode the single discrete action into Fireboy and Watergirl actions
         fireboy_action = action // 4  # Integer division to get Fireboy's action
         watergirl_action = action % 4  # Modulo to get Watergirl's action
+
+        # fireboy_action = 3
+        # watergirl_action = 3
+
+        # # Map the action to Fireboy and Watergirl actions
+        # if action <= 3:
+        #     fireboy_action = action
+        # elif action >= 4:
+        #     watergirl_action = action - 4
 
         # Map Fireboy's action
         if fireboy_action == 0:
@@ -487,5 +495,5 @@ class FireboyAndWatergirlEnv(gym.Env):
 register(
     id="FireboyAndWatergirl-sac-v0",  # Unique ID for the environment
     # Path to the environment class
-    entry_point="cleanrl.fireboy_and_wategirl_sac:FireboyAndWatergirlEnv",
+    entry_point="cleanrl.fireboy_and_watergirl_sac:FireboyAndWatergirlEnv",
 )
