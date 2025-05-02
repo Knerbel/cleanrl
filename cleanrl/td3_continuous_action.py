@@ -14,12 +14,15 @@ import tyro
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 
+# Import your Fireboy and Watergirl environment to ensure it's registered
+import cleanrl.fireboy_and_wategirl_td3
+
 
 @dataclass
 class Args:
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
     """the name of this experiment"""
-    seed: int = 1
+    seed: int = 2
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
@@ -41,7 +44,7 @@ class Args:
     """the user or org name of the model repository from the Hugging Face Hub"""
 
     # Algorithm specific arguments
-    env_id: str = "Hopper-v4"
+    env_id: str = "FireboyAndWatergirl-td3-v0"  # "Hopper-v4"
     """the id of the environment"""
     total_timesteps: int = 1000000
     """total timesteps of the experiments"""
@@ -49,7 +52,7 @@ class Args:
     """the learning rate of the optimizer"""
     num_envs: int = 1
     """the number of parallel game environments"""
-    buffer_size: int = int(1e6)
+    buffer_size: int = int(1e5)  # int(1e6)
     """the replay memory buffer size"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -88,7 +91,8 @@ class QNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
         self.fc1 = nn.Linear(
-            np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape),
+            np.array(env.single_observation_space.shape).prod() +
+            np.prod(env.single_action_space.shape),
             256,
         )
         self.fc2 = nn.Linear(256, 256)
@@ -105,7 +109,8 @@ class QNetwork(nn.Module):
 class Actor(nn.Module):
     def __init__(self, env):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
+        self.fc1 = nn.Linear(
+            np.array(env.single_observation_space.shape).prod(), 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc_mu = nn.Linear(256, np.prod(env.single_action_space.shape))
         # action rescaling
@@ -158,7 +163,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
-        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "|param|value|\n|-|-|\n%s" % (
+            "\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -167,13 +173,16 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name) for i in range(args.num_envs)]
+        [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name)
+         for i in range(args.num_envs)]
     )
-    assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
+    assert isinstance(envs.single_action_space,
+                      gym.spaces.Box), "only continuous action space is supported"
 
     actor = Actor(envs).to(device)
     qf1 = QNetwork(envs).to(device)
@@ -184,8 +193,10 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     target_actor.load_state_dict(actor.state_dict())
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
-    q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.learning_rate)
-    actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
+    q_optimizer = optim.Adam(list(qf1.parameters()) +
+                             list(qf2.parameters()), lr=args.learning_rate)
+    actor_optimizer = optim.Adam(
+        list(actor.parameters()), lr=args.learning_rate)
 
     envs.single_observation_space.dtype = np.float32
     rb = ReplayBuffer(
@@ -203,23 +214,30 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
-            actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
+            actions = np.array([envs.single_action_space.sample()
+                               for _ in range(envs.num_envs)])
         else:
             with torch.no_grad():
                 actions = actor(torch.Tensor(obs).to(device))
-                actions += torch.normal(0, actor.action_scale * args.exploration_noise)
-                actions = actions.cpu().numpy().clip(envs.single_action_space.low, envs.single_action_space.high)
+                actions += torch.normal(0, actor.action_scale *
+                                        args.exploration_noise)
+                actions = actions.cpu().numpy().clip(
+                    envs.single_action_space.low, envs.single_action_space.high)
 
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, rewards, terminations, truncations, infos = envs.step(actions)
+        next_obs, rewards, terminations, truncations, infos = envs.step(
+            actions)
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
                 if info is not None:
-                    print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                    writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                    writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+                    print(
+                        f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                    writer.add_scalar("charts/episodic_return",
+                                      info["episode"]["r"], global_step)
+                    writer.add_scalar("charts/episodic_length",
+                                      info["episode"]["l"], global_step)
                     break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
@@ -243,10 +261,14 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 next_state_actions = (target_actor(data.next_observations) + clipped_noise).clamp(
                     envs.single_action_space.low[0], envs.single_action_space.high[0]
                 )
-                qf1_next_target = qf1_target(data.next_observations, next_state_actions)
-                qf2_next_target = qf2_target(data.next_observations, next_state_actions)
-                min_qf_next_target = torch.min(qf1_next_target, qf2_next_target)
-                next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
+                qf1_next_target = qf1_target(
+                    data.next_observations, next_state_actions)
+                qf2_next_target = qf2_target(
+                    data.next_observations, next_state_actions)
+                min_qf_next_target = torch.min(
+                    qf1_next_target, qf2_next_target)
+                next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * \
+                    args.gamma * (min_qf_next_target).view(-1)
 
             qf1_a_values = qf1(data.observations, data.actions).view(-1)
             qf2_a_values = qf2(data.observations, data.actions).view(-1)
@@ -260,26 +282,36 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             q_optimizer.step()
 
             if global_step % args.policy_frequency == 0:
-                actor_loss = -qf1(data.observations, actor(data.observations)).mean()
+                actor_loss = -qf1(data.observations,
+                                  actor(data.observations)).mean()
                 actor_optimizer.zero_grad()
                 actor_loss.backward()
                 actor_optimizer.step()
 
                 # update the target network
                 for param, target_param in zip(actor.parameters(), target_actor.parameters()):
-                    target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
+                    target_param.data.copy_(
+                        args.tau * param.data + (1 - args.tau) * target_param.data)
                 for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
-                    target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
+                    target_param.data.copy_(
+                        args.tau * param.data + (1 - args.tau) * target_param.data)
                 for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
-                    target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
+                    target_param.data.copy_(
+                        args.tau * param.data + (1 - args.tau) * target_param.data)
 
             if global_step % 100 == 0:
-                writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
-                writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
-                writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-                writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
-                writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
-                writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
+                writer.add_scalar("losses/qf1_values",
+                                  qf1_a_values.mean().item(), global_step)
+                writer.add_scalar("losses/qf2_values",
+                                  qf2_a_values.mean().item(), global_step)
+                writer.add_scalar("losses/qf1_loss",
+                                  qf1_loss.item(), global_step)
+                writer.add_scalar("losses/qf2_loss",
+                                  qf2_loss.item(), global_step)
+                writer.add_scalar("losses/qf_loss",
+                                  qf_loss.item() / 2.0, global_step)
+                writer.add_scalar("losses/actor_loss",
+                                  actor_loss.item(), global_step)
                 print("SPS:", int(global_step / (time.time() - start_time)))
                 writer.add_scalar(
                     "charts/SPS",
@@ -289,7 +321,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
-        torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
+        torch.save((actor.state_dict(), qf1.state_dict(),
+                   qf2.state_dict()), model_path)
         print(f"model saved to {model_path}")
         from cleanrl_utils.evals.td3_eval import evaluate
 
