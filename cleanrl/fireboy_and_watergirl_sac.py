@@ -40,7 +40,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         # )
 
         # Initialize game components
-        self.level = "level1"
+        self.level = "level1b"
         self.game = Game()  # Instantiate the Game class
         self.board = None
         self.fire_boy = None
@@ -54,7 +54,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.done = False
 
         # Load the level
-        self._load_level()
+        self._load_level1()
 
         self.steps = 0
         self.max_steps = 400
@@ -81,12 +81,12 @@ class FireboyAndWatergirlEnv(gym.Env):
             "Watergirl Still",
         ]
 
-    def _load_level(self):
+    def _load_level1(self):
         """
         Load the level data and initialize game components.
         """
-        if self.level == "level1":
-            self.board = Board('./fireboy_and_watergirl/data/level1.txt')
+        if self.level == "level1" or self.level == "level1b":
+            self.board = Board('./fireboy_and_watergirl/data/level1b.txt')
             gate_location = (285, 128)
             plate_locations = [(190, 168), (390, 168)]
             gate = Gates(gate_location, plate_locations)
@@ -106,15 +106,60 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.stars = [
                 Stars((240, 330), "fire"),
                 Stars((260, 330), "water"),
+
                 Stars((480, 300), "fire"),
                 Stars((500, 300), "water"),
+
                 Stars((370, 240), "fire"),
                 Stars((390, 240), "water"),
+
                 Stars((30, 200), "fire"),
                 Stars((50, 200), "water"),
             ]
 
         # Add more levels as needed
+
+    # def _load_level2(self):
+    #     """
+    #     Load the level data from the file and dynamically set up the game components.
+    #     """
+    #     # Read the level data from the file
+    #     with open('./fireboy_and_watergirl/data/'+self.level+'.txt', 'r') as file:
+    #         level_data = [line.strip().split(',') for line in file.readlines()]
+    #    # Initialize game components
+    #     self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
+    #     self.gates: list[Gates] = []
+    #     self.doors: list[FireDoor | WaterDoor] = []
+    #     self.stars: list[Stars] = []
+    #     self.fire_boy: FireBoy = None
+    #     self.water_girl: WaterGirl = None
+    #    # Parse the level data to dynamically set up components
+    #     for y, row in enumerate(level_data):
+    #         for x, tile in enumerate(row):
+    #             # Assuming 16x16 tiles
+    #             if tile == 'f':  # Fireboy starting position
+    #                 self.fire_boy = FireBoy((x * 16, y * 16))
+    #             elif tile == 'w':  # Watergirl starting position
+    #                 self.water_girl = WaterGirl((x * 16, y * 16))
+    #             elif tile == 'A':  # Fire door
+    #                 self.doors.append(FireDoor((x * 16, y * 16)))
+    #             elif tile == 'B':  # Water door
+    #                 self.doors.append(WaterDoor((x * 16, y * 16)))
+    #             # elif tile == 'D':  # Gate
+    #                 # Add a generic gate (you can customize this further)
+    #                 # self.gates.append(Gates((x * 16, y * 16), []))
+    #             # elif tile == 'P':  # Plate A
+    #                 # Add a plate that controls a gate
+    #                 # self.gates.append(
+    #                 #     Plate((x * 16, y * 16), [(x * 16, y * 16)]))
+    #             # elif tile == 'B':  # Plate B
+    #                 # self.gates.append(
+    #                 # Gates((x * 16, y * 16), [(x * 16, y * 16)]))
+    #             elif tile == 'a':  # Star A
+    #                 self.stars.append(Stars([x * 16, y * 16], "fire"))
+    #             elif tile == 'b':  # Star B
+    #                 self.stars.append(Stars([x * 16, y * 16], "water"))
+    #             # Add more cases as needed for other tiles
 
     def reset(self, seed=None, options=None):
         """
@@ -123,7 +168,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         super().reset(seed=seed)
         self.steps = 0
 
-        self._load_level()
+        self._load_level1()
         self.state = self._get_state()
         self.done = False
         return self.state, {}
@@ -142,11 +187,13 @@ class FireboyAndWatergirlEnv(gym.Env):
         reward = self._compute_reward()
 
         # Check if the game is done
-        self.done = self._check_done()
+        self.done = False  # self._check_done()
 
         self.steps += 1
         if self.steps >= self.max_steps:
             self.done = True
+
+        if self.done:
             self._get_state(draw=True)
 
         # Optionally, provide additional info
@@ -178,21 +225,93 @@ class FireboyAndWatergirlEnv(gym.Env):
 
     def _get_state(self, draw=False):
         level_data = self.board.get_level_data()
-        tile_mapping = {
-            ' ': 255, 'S': 00, 'L': 20, 'W': 30, 'G': 40, 'w': 50, 'f': 60,
-            'a': 70, 'b': 80, 'P': 90, 'D': 100, 'A': 110, 'B': 120
+
+        # Initialize empty RGB grid
+        rgb_image = np.zeros(
+            (len(level_data), len(level_data[0]), 3), dtype=np.uint8)
+
+        # Color mapping for each tile (RGB format)
+        color_mapping = {
+            # Base tiles
+            ' ': [255, 255, 255],  # Air - white
+            'S': [50, 50, 50],     # Stone - dark gray
+
+            # Hazards
+            'L': [255, 50, 0],     # Lava - red
+            'W': [0, 100, 255],    # Water - blue
+            'G': [50, 200, 50],    # Goo - green
+
+            # Characters
+            # Fireboy - orange-red (distinguishable from lava)
+            'f': [255, 0, 0],
+            # Watergirl - light blue (distinguishable from water)
+            'w': [0, 0, 255],
+
+            # Doors
+            'A': [200, 100, 0],    # Fire door - amber
+            'B': [0, 150, 200],    # Water door - aqua
+
+            # Stars
+            'a': [255, 200, 0],    # Fire star - gold
+            'b': [0, 200, 255],    # Water star - cyan
+
+            # Other elements
+            'P': [150, 150, 150],  # Pressure plate - gray
+            'D': [200, 200, 100],  # Gate - yellow-ish
         }
-        level_grid = np.array([[tile_mapping[tile] for tile in row]
-                              for row in level_data], dtype=np.uint8)
 
-        # Duplicate the single channel to create an RGB image
-        rgb_image = np.stack(
-            [level_grid, level_grid, level_grid], axis=-1)
+        # Fill the RGB image based on the level data
+        for y, row in enumerate(level_data):
+            for x, tile in enumerate(row):
+                rgb_image[y, x] = color_mapping.get(
+                    tile, [100, 100, 100])  # Default gray for unknown tiles
 
-        if draw == True:
+        # Add dynamic elements (characters, stars, etc.)
+        # Get positions and add them to the image
+        if self.fire_boy:
+            fb_x, fb_y = self.fire_boy.get_position()
+            # Convert to grid coordinates
+            fb_x, fb_y = int(fb_x // 16), int(fb_y // 16)
+            if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
+                rgb_image[fb_y, fb_x] = color_mapping['f']  # Fireboy color
+
+        if self.water_girl:
+            wg_x, wg_y = self.water_girl.get_position()
+            # Convert to grid coordinates
+            wg_x, wg_y = int(wg_x // 16), int(wg_y // 16)
+            if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
+                rgb_image[wg_y, wg_x] = color_mapping['w']  # Watergirl color
+
+        # Add stars to the image
+        for star in self.stars:
+            if not star.is_collected:
+                s_x, s_y = star.get_position()
+                # Convert to grid coordinates
+                s_x, s_y = int(s_x // 16), int(s_y // 16)
+                if 0 <= s_y < rgb_image.shape[0] and 0 <= s_x < rgb_image.shape[1]:
+                    if star._player == "fire":
+                        rgb_image[s_y, s_x] = color_mapping['a']  # Fire star
+                    else:
+                        rgb_image[s_y, s_x] = color_mapping['b']  # Water star
+
+        # Add doors to the image
+        for door in self.doors:
+            d_x, d_y = door.get_position()
+            # Convert to grid coordinates
+            d_x, d_y = int(d_x // 16), int(d_y // 16)
+            if 0 <= d_y < rgb_image.shape[0] and 0 <= d_x < rgb_image.shape[1]:
+                if isinstance(door, FireDoor):
+                    rgb_image[d_y, d_x] = [200, 100, 0]  # Fire door
+                else:
+                    rgb_image[d_y, d_x] = [0, 150, 200]  # Water door
+
+        # Save image if requested
+        if draw:
             plt.figure(figsize=(10, 8))
             plt.imshow(rgb_image)
-            plt.savefig(f"observation_{self.steps}.png")
+            plt.axis('off')  # Remove axes for a clean image
+            plt.savefig(f"observation_{self.steps}.png",
+                        bbox_inches='tight', pad_inches=0)
             plt.close()
         return rgb_image
 
