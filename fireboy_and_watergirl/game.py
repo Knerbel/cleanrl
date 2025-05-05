@@ -3,6 +3,7 @@ from pygame.locals import *
 
 from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import Character
+from fireboy_and_watergirl.doors import FireDoor, WaterDoor
 from fireboy_and_watergirl.stars import Stars
 
 
@@ -95,7 +96,7 @@ class Game:
 
     # game mechanics
 
-    def draw_level_background(self, board):
+    def draw_level_background(self, board: Board):
         """
         Draw the background of the level.
 
@@ -158,7 +159,7 @@ class Game:
             # draw door frame
             self.display.blit(door.frame_image, door.frame_location)
 
-    def draw_player(self, players):
+    def draw_player(self, players: list[Character]):
         """
         Draw the player.
 
@@ -193,7 +194,7 @@ class Game:
                 self.display.blit(
                     star.star_image, (star.star_location[0], star.star_location[1]))
 
-    def move_player(self, board, gates, players):
+    def move_player(self, board, gates, players: list[Character]):
         """
         Move player
 
@@ -274,7 +275,7 @@ class Game:
             if collision_types['top']:
                 player.y_velocity = 0
 
-    def check_for_death(self, board, players):
+    def check_for_death(self, board: Board, players: list[Character]):
         """
         Check to see if player has faden in pool that kills them or if they are
         crushed by a gate.
@@ -333,7 +334,7 @@ class Game:
                         # Mark the star as collected
                         star.collect_star()
 
-    def check_for_gate_press(self, gates, players):
+    def check_for_gate_press(self, gates, players: list[Character]):
         """
         Check to see if either player is touching one of the gate buttons.
 
@@ -361,7 +362,7 @@ class Game:
             # otherwise, the gate will close
             gate.try_open_gate()
 
-    def check_for_door_open(self, door, player):
+    def check_for_door_open(self, door: FireDoor | WaterDoor, player: Character):
         """
         Check to see if a player is at the door.
 

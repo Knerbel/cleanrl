@@ -1,4 +1,3 @@
-# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/sac/#sac_ataripy
 import os
 import random
 import time
@@ -51,7 +50,7 @@ class Args:
     """the id of the environment"""
     total_timesteps: int = 200000
     """total timesteps of the experiments"""
-    buffer_size: int = int(1000)
+    buffer_size: int = int(10000)
     """the replay memory buffer size"""  # smaller than in original paper but evaluation is done only for 100k steps anyway
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -59,7 +58,7 @@ class Args:
     """target smoothing coefficient (default: 1)"""
     batch_size: int = 64
     """the batch size of sample from the reply memory"""
-    learning_starts: int = 1e4
+    learning_starts: int = 2e4
     """timestep to start learning"""
     policy_lr: float = 3e-4
     """the learning rate of the policy network optimizer"""
@@ -277,7 +276,6 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
         else:
             actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
             actions = actions.detach().cpu().numpy()
-            envs.envs[0].render()
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(
