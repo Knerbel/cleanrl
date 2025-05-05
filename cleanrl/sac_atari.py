@@ -62,7 +62,7 @@ class Args:
     """timestep to start learning"""
     policy_lr: float = 3e-4
     """the learning rate of the policy network optimizer"""
-    q_lr: float = 3e-4
+    q_lr: float = 3e-4*2
     """the learning rate of the Q network network optimizer"""
     update_frequency: int = 4
     """the frequency of training updates"""
