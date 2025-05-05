@@ -47,12 +47,11 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.steps = 0
         self.max_steps = 400
 
-        self.level_height = 25
-        self.level_width = 34
+        self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
+        self.level_width = 34 - 2   # Assuming 1-tile border on left and right
         self.observation_space = spaces.Box(
             low=0,
             high=255,
-            # Example: (25, 34, 3)
             shape=(self.level_height, self.level_width, 3),
             dtype=np.uint8
         )
@@ -258,9 +257,14 @@ class FireboyAndWatergirlEnv(gym.Env):
     def _get_state(self, draw=False):
         level_data = self.board.get_level_data()
 
-        # Initialize empty RGB grid
-        rgb_image = np.zeros(
-            (len(level_data), len(level_data[0]), 3), dtype=np.uint8)
+        # Ignore the outer border (typically 1 tile) since it's always constant
+        # Determine the playable area boundaries (ignore outer walls)
+        border_size = 1  # Assuming outer wall is 1 tile thick
+
+        # Initialize empty RGB grid for the inner area only
+        inner_height = len(level_data) - (2 * border_size)
+        inner_width = len(level_data[0]) - (2 * border_size)
+        rgb_image = np.zeros((inner_height, inner_width, 3), dtype=np.uint8)
 
         # Color mapping for each tile (RGB format)
         color_mapping = {
@@ -274,10 +278,8 @@ class FireboyAndWatergirlEnv(gym.Env):
             'G': [50, 200, 50],    # Goo - green
 
             # Characters
-            # Fireboy - orange-red (distinguishable from lava)
-            'f': [255, 0, 0],
-            # Watergirl - light blue (distinguishable from water)
-            'w': [0, 0, 255],
+            'f': [255, 0, 0],      # Fireboy - red
+            'w': [0, 0, 255],      # Watergirl - blue
 
             # Doors
             'A': [200, 100, 0],    # Fire door - amber
@@ -292,25 +294,31 @@ class FireboyAndWatergirlEnv(gym.Env):
             'D': [200, 200, 100],  # Gate - yellow-ish
         }
 
-        # Fill the RGB image based on the level data
-        for y, row in enumerate(level_data):
-            for x, tile in enumerate(row):
-                rgb_image[y, x] = color_mapping.get(
-                    tile, [100, 100, 100])  # Default gray for unknown tiles
+        # Fill the RGB image based on the inner level data
+        for y in range(border_size, len(level_data) - border_size):
+            for x in range(border_size, len(level_data[0]) - border_size):
+                # Adjust coordinates for the inner grid
+                inner_y = y - border_size
+                inner_x = x - border_size
+                rgb_image[inner_y, inner_x] = color_mapping.get(
+                    level_data[y][x], [100, 100, 100])  # Default gray for unknown tiles
+
+        # Adjust coordinates for dynamic elements to account for border removal
 
         # Add dynamic elements (characters, stars, etc.)
-        # Get positions and add them to the image
         if self.fire_boy:
             fb_x, fb_y = self.fire_boy.get_position()
-            # Convert to grid coordinates
-            fb_x, fb_y = int(fb_x // 16), int(fb_y // 16)
+            # Convert to grid coordinates and adjust for border
+            fb_x, fb_y = int(fb_x // 16) - \
+                border_size, int(fb_y // 16) - border_size
             if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
                 rgb_image[fb_y, fb_x] = color_mapping['f']  # Fireboy color
 
         if self.water_girl:
             wg_x, wg_y = self.water_girl.get_position()
-            # Convert to grid coordinates
-            wg_x, wg_y = int(wg_x // 16), int(wg_y // 16)
+            # Convert to grid coordinates and adjust for border
+            wg_x, wg_y = int(wg_x // 16) - \
+                border_size, int(wg_y // 16) - border_size
             if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
                 rgb_image[wg_y, wg_x] = color_mapping['w']  # Watergirl color
 
@@ -318,8 +326,9 @@ class FireboyAndWatergirlEnv(gym.Env):
         for star in self.stars:
             if not star.is_collected:
                 s_x, s_y = star.get_position()
-                # Convert to grid coordinates
-                s_x, s_y = int(s_x // 16), int(s_y // 16)
+                # Convert to grid coordinates and adjust for border
+                s_x, s_y = int(s_x // 16) - \
+                    border_size, int(s_y // 16) - border_size
                 if 0 <= s_y < rgb_image.shape[0] and 0 <= s_x < rgb_image.shape[1]:
                     if star._player == "fire":
                         rgb_image[s_y, s_x] = color_mapping['a']  # Fire star
@@ -327,25 +336,54 @@ class FireboyAndWatergirlEnv(gym.Env):
                         rgb_image[s_y, s_x] = color_mapping['b']  # Water star
 
         # Add doors to the image
-        for door in self.doors:
-            d_x, d_y = door.get_position()
-            # Convert to grid coordinates
-            d_x, d_y = int(d_x // 16), int(d_y // 16)
-            if 0 <= d_y < rgb_image.shape[0] and 0 <= d_x < rgb_image.shape[1]:
-                if isinstance(door, FireDoor):
-                    rgb_image[d_y, d_x] = [200, 100, 0]  # Fire door
-                else:
-                    rgb_image[d_y, d_x] = [0, 150, 200]  # Water door
+        # for door in self.doors:
+        #     d_x, d_y = door.get_position()
+        #     # Convert to grid coordinates and adjust for border
+        #     d_x, d_y = int(d_x // 16) - \
+        #         border_size, int(d_y // 16) - border_size
+        #     if 0 <= d_y < rgb_image.shape[0] and 0 <= d_x < rgb_image.shape[1]:
+        #         if isinstance(door, FireDoor):
+        #             rgb_image[d_y, d_x] = color_mapping['A']  # Fire door
+        #         else:
+        #             rgb_image[d_y, d_x] = color_mapping['B']  # Water door
+
+        # Add gates to the image
+        # for gate in self.gates:
+        #     g_x, g_y = gate.get_position()
+        #     # Convert to grid coordinates and adjust for border
+        #     g_x, g_y = int(g_x // 16) - \
+        #         border_size, int(g_y // 16) - border_size
+        #     if 0 <= g_y < rgb_image.shape[0] and 0 <= g_x < rgb_image.shape[1]:
+        #         rgb_image[g_y, g_x] = color_mapping['D']  # Gate
+
+        #     # Add pressure plates
+        #     for plate_loc in gate.get_plate_positions():
+        #         p_x, p_y = plate_loc
+        #         # Convert to grid coordinates and adjust for border
+        #         p_x, p_y = int(p_x // 16) - \
+        #             border_size, int(p_y // 16) - border_size
+        #         if 0 <= p_y < rgb_image.shape[0] and 0 <= p_x < rgb_image.shape[1]:
+        #             rgb_image[p_y, p_x] = color_mapping['P']  # Pressure plate
 
         # Save image if requested
         if draw:
             plt.figure(figsize=(10, 8))
             plt.imshow(rgb_image)
             plt.axis('off')
-            plt.subplots_adjust(left=0, right=1, top=1,
-                                bottom=0)  # Remove padding
+            plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
             plt.savefig(f"observation.png", bbox_inches='tight', pad_inches=0)
             plt.close()
+
+        # Update observation space if this is the first time running
+        if self.observation_space.shape != (inner_height, inner_width, 3):
+            self.observation_space = spaces.Box(
+                low=0,
+                high=255,
+                shape=(inner_height, inner_width, 3),
+                dtype=np.uint8
+            )
+            print(
+                f"Updated observation space to: {self.observation_space.shape}")
 
         return rgb_image
 
