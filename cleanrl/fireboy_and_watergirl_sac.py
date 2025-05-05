@@ -27,18 +27,6 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Actions: 0 = Fireboy Left, 1 = Fireboy Right, 2 = Fireboy Up, 3 = Fireboy Still,
         #          4 = Watergirl Left, 5 = Watergirl Right, 6 = Watergirl Up, 7 = Watergirl Still
         self.action_space = spaces.Discrete(8)
-        # 4 actions for Fireboy, 4 actions for Watergirl
-        # self.action_space = spaces.MultiDiscrete([4, 4])
-
-        # Define the observation space (feature-based representation)
-        # [Fireboy_x, Fireboy_y, Watergirl_x, Watergirl_y, Gate_status, Door_status]
-        # self.observation_space = spaces.Box(
-        #     low=np.array([0, 0, 0, 0, 0, 0]),
-        #     # Adjust max_x and max_y as needed
-        #     high=np.array([1000, 1000, 1000, 1000, 1, 1]),
-        #     dtype=np.float32
-        # )
-
         # Initialize game components
         self.level = "level1b"
         self.game = Game()  # Instantiate the Game class
@@ -46,7 +34,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.fire_boy = None
         self.water_girl = None
         self.gates = None
-        self.doors = None
+        self.doors: list[FireDoor | WaterDoor] = None
         self.controller = GeneralController()
 
         # Initialize game state
@@ -187,13 +175,13 @@ class FireboyAndWatergirlEnv(gym.Env):
         reward = self._compute_reward()
 
         # Check if the game is done
-        self.done = False  # self._check_done()
+        self.done = self._check_done()
 
         self.steps += 1
         if self.steps >= self.max_steps:
             self.done = True
 
-        if self.done:
+        if (self.done):
             self._get_state(draw=True)
 
         # Optionally, provide additional info
@@ -204,18 +192,62 @@ class FireboyAndWatergirlEnv(gym.Env):
     def render(self, mode="human"):
         """
         Render the environment to the screen or other output.
+        Shows only the RGB observation used by the agent.
         """
-
         if mode == "human":
-            # Use the Game class to render the game
-            self.game.draw_level_background(self.board)
-            self.game.draw_board(self.board)
-            if self.gates:
-                self.game.draw_gates(self.gates)
-            self.game.draw_doors(self.doors)
-            self.game.draw_player([self.fire_boy, self.water_girl])
-            self.game.draw_stars(self.stars)
-            self.game.refresh_window()
+            # Get the RGB observation
+            rgb_image = self._get_state()
+
+            # Create a global matplotlib instance (static class variable)
+            # that persists across environment instances
+            if not hasattr(FireboyAndWatergirlEnv, 'plt_initialized'):
+                print("Initializing matplotlib...")
+                import matplotlib
+                matplotlib.use('TkAgg')  # Force TkAgg backend
+                import matplotlib.pyplot as plt
+                plt.ion()  # Turn on interactive mode
+
+                # Store the initialized modules as class variables
+                FireboyAndWatergirlEnv.matplotlib = matplotlib
+                FireboyAndWatergirlEnv.plt = plt
+                FireboyAndWatergirlEnv.plt_initialized = True
+
+                # Create the figure as a class variable
+                FireboyAndWatergirlEnv.render_fig = plt.figure(
+                    figsize=(8, 6), num="Fireboy & Watergirl")
+                FireboyAndWatergirlEnv.render_ax = FireboyAndWatergirlEnv.render_fig.add_subplot(
+                    111)
+                FireboyAndWatergirlEnv.render_img = FireboyAndWatergirlEnv.render_ax.imshow(
+                    rgb_image)
+                FireboyAndWatergirlEnv.render_ax.axis('off')
+                FireboyAndWatergirlEnv.render_fig.tight_layout()
+                # plt.show(block=False)
+
+            # Update the existing static figure
+            FireboyAndWatergirlEnv.render_img.set_data(rgb_image)
+
+            # Update statistics
+            reward = self._compute_reward()
+            num_stars_collected = sum(s.is_collected for s in self.stars)
+            FireboyAndWatergirlEnv.render_fig.suptitle(
+                f"Step: {self.steps} | Stars: {num_stars_collected}/{len(self.stars)} | Reward: {reward}",
+                color="red"
+            )
+
+            # Process events but handle errors silently
+            try:
+                FireboyAndWatergirlEnv.render_fig.canvas.draw_idle()
+                FireboyAndWatergirlEnv.render_fig.canvas.flush_events()
+                FireboyAndWatergirlEnv.plt.pause(0.001)
+            except Exception as e:
+                # Only print severe errors, not just window closed
+                if not ("closed" in str(e).lower() or "destroy" in str(e).lower()):
+                    print(f"Warning: {e}")
+
+            return rgb_image
+
+        elif mode == "rgb_array":
+            return self._get_state()
 
     def close(self):
         """
@@ -243,9 +275,9 @@ class FireboyAndWatergirlEnv(gym.Env):
 
             # Characters
             # Fireboy - orange-red (distinguishable from lava)
-            'f': [255, 0, 0],
+            'f': [255, 0, 100],
             # Watergirl - light blue (distinguishable from water)
-            'w': [0, 0, 255],
+            'w': [100, 200, 255],
 
             # Doors
             'A': [200, 100, 0],    # Fire door - amber
@@ -309,10 +341,12 @@ class FireboyAndWatergirlEnv(gym.Env):
         if draw:
             plt.figure(figsize=(10, 8))
             plt.imshow(rgb_image)
-            plt.axis('off')  # Remove axes for a clean image
-            plt.savefig(f"observation_{self.steps}.png",
-                        bbox_inches='tight', pad_inches=0)
+            plt.axis('off')
+            plt.subplots_adjust(left=0, right=1, top=1,
+                                bottom=0)  # Remove padding
+            plt.savefig(f"observation.png", bbox_inches='tight', pad_inches=0)
             plt.close()
+
         return rgb_image
 
     def _apply_action(self, action):
@@ -392,12 +426,54 @@ class FireboyAndWatergirlEnv(gym.Env):
         for star in self.stars:
             if star.is_collected:
                 if (star._player == "fire"):
-                    fireboy_reward += 5
+                    fireboy_reward += 1
                 else:
-                    watergirl_reward += 5
+                    watergirl_reward += 1
 
         # Combine rewards for both agents
         return min(fireboy_reward, watergirl_reward) + 0.1 * max(fireboy_reward, watergirl_reward)
+
+    # def _compute_reward(self):
+    #     reward = 0
+
+    #     # Death penalty
+    #     if self.fire_boy.is_dead() or self.water_girl.is_dead():
+    #         reward -= 1
+
+    #     # Star collection rewards
+    #     for star in self.stars:
+    #         if star.is_collected and not star.reward_given:
+    #             reward += 5
+    #             star.reward_given = True  # Flag to avoid repeated rewards
+
+    #     # Distance-based shaping
+    #     closest_star_dist = float('inf')
+    #     for star in self.stars:
+    #         if not star.is_collected:
+    #             fb_pos = self.fire_boy.get_position()
+    #             wg_pos = self.water_girl.get_position()
+
+    #             # Get appropriate character position based on star type
+    #             char_pos = fb_pos if star._player == "fire" else wg_pos
+
+    #             # Calculate distance
+    #             star_pos = star.get_position()
+    #             dist = np.sqrt((char_pos[0] - star_pos[0])
+    #                            ** 2 + (char_pos[1] - star_pos[1])**2)
+
+    #             closest_star_dist = min(closest_star_dist, dist)
+
+    #     # Store previous distance for comparison
+    #     if not hasattr(self, 'prev_closest_star_dist'):
+    #         self.prev_closest_star_dist = closest_star_dist
+
+    #     # Reward for getting closer to a star
+    #     if closest_star_dist < self.prev_closest_star_dist:
+    #         reward += 0.01 * (self.prev_closest_star_dist - closest_star_dist)
+
+    #     self.prev_closest_star_dist = closest_star_dist
+
+    #     return reward
 
     def _check_done(self):
         """
