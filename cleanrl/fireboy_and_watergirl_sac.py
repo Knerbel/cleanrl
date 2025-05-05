@@ -175,7 +175,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         reward = self._compute_reward()
 
         # Check if the game is done
-        self.done = self._check_done()
+        self.done = False  # self._check_done()
 
         self.steps += 1
         if self.steps >= self.max_steps:
@@ -275,9 +275,9 @@ class FireboyAndWatergirlEnv(gym.Env):
 
             # Characters
             # Fireboy - orange-red (distinguishable from lava)
-            'f': [255, 0, 100],
+            'f': [255, 0, 0],
             # Watergirl - light blue (distinguishable from water)
-            'w': [100, 200, 255],
+            'w': [0, 0, 255],
 
             # Doors
             'A': [200, 100, 0],    # Fire door - amber
