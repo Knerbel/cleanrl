@@ -14,14 +14,14 @@ from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
 # Import your Fireboy and Watergirl environment to ensure it's registered
-import cleanrl.fireboy_and_wategirl_ppo
+import cleanrl.fireboy_and_watergirl_ppo
 
 
 @dataclass
 class Args:
-    render: bool = True
+    render: bool = False
     """if toggled, the environment will be rendered"""
-    exp_name: str = os.path.basename(__file__)[: -len(".py")]
+    exp_name: str = ""  # os.path.basename(__file__)[: -len(".py")]
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -41,13 +41,13 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "FireboyAndWatergirl-ppo-v0"  # "CartPole-v1"
     """the id of the environment"""
-    total_timesteps: int = 300000
+    total_timesteps: int = 200000
     """total timesteps of the experiments"""
-    learning_rate: float = 2.5e-4 * 2.5
+    learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 4 * 4
+    num_envs: int = 4
     """the number of parallel game environments"""
-    num_steps: int = 128 * 5
+    num_steps: int = 400  # 128
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
