@@ -15,12 +15,12 @@ from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 
 # Import your Fireboy and Watergirl environment to ensure it's registered
-import cleanrl.fireboy_and_wategirl_dqn
+import cleanrl.fireboy_and_watergirl_dqn
 
 
 @dataclass
 class Args:
-    exp_name: str = os.path.basename(__file__)[: -len(".py")]
+    exp_name: str = ''  # os.path.basename(__file__)[: -len(".py")]
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
