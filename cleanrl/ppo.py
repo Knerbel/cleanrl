@@ -41,15 +41,15 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "FireboyAndWatergirl-ppo-v0"  # "CartPole-v1"
     """the id of the environment"""
-    total_timesteps: int = 200000
+    total_timesteps: int = 4000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
     num_envs: int = 4
     """the number of parallel game environments"""
-    num_steps: int = 400  # 128
+    num_steps: int = 400 * 20  # 128
     """the number of steps to run in each environment per policy rollout"""
-    anneal_lr: bool = True
+    anneal_lr: bool = False
     """Toggle learning rate annealing for policy and value networks"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -65,7 +65,7 @@ class Args:
     """the surrogate clipping coefficient"""
     clip_vloss: bool = True
     """Toggles whether or not to use a clipped loss for the value function, as per the paper."""
-    ent_coef: float = 0.001
+    ent_coef: float = 0.01  # 0.001
     """coefficient of the entropy"""
     vf_coef: float = 0.5
     """coefficient of the value function"""
@@ -87,6 +87,7 @@ def make_env(env_id, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
+            env.env_index = idx
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         else:
             env = gym.make(env_id)

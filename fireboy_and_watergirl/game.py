@@ -17,15 +17,24 @@ class Game:
         display that only the game handles. The internal will be scaled to
         fit public display.
         """
+        self.index = Game.increment_game_count()
+
         # create external pygame window
-        WINDOW_SIZE = (640, 480)
-        self.screen = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE)
-        pygame.display.set_caption("Fire Boy and Water Girl")
+        # WINDOW_SIZE = (640, 480)
+        # self.screen = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE)
+        # pygame.display.set_caption("Fire Boy and Water Girl")
 
         # create internal pygame window
-        CHUNK_SIZE = 16
-        DISPLAY_SIZE = (34 * CHUNK_SIZE, 25 * CHUNK_SIZE)
-        self.display = pygame.Surface(DISPLAY_SIZE)
+        # CHUNK_SIZE = 16
+        # DISPLAY_SIZE = (34 * CHUNK_SIZE, 25 * CHUNK_SIZE)
+        # self.display = pygame.Surface(DISPLAY_SIZE)
+
+    @staticmethod
+    def increment_game_count():
+        if not hasattr(Game, "_game_count"):
+            Game._game_count = 0
+        Game._game_count += 1
+        return Game._game_count
 
     def draw_level_screen(self, level_select):
         """
@@ -194,7 +203,7 @@ class Game:
                 self.display.blit(
                     star.star_image, (star.star_location[0], star.star_location[1]))
 
-    def move_player(self, board, gates, players: list[Character]):
+    def move_player(self, board: Board, gates: list[FireDoor | WaterDoor], players: list[Character]):
         """
         Move player
 
@@ -267,9 +276,9 @@ class Game:
             # if player hits ground, reset air_timer
             if collision_types['bottom']:
                 player.y_velocity = 0
-                player.air_timer = 0
+                player.can_jump = True
             else:
-                player.air_timer += 1
+                player.can_jump = False
 
             # if player hit head, lose all y_velocity
             if collision_types['top']:
@@ -362,6 +371,27 @@ class Game:
             # otherwise, the gate will close
             gate.try_open_gate()
 
+    def check_for_at_door(self, door: FireDoor | WaterDoor, player: Character):
+        """
+        Check to see if a player is at the door.
+
+        Args:
+            door::door class object
+                A door object containing information on its location and state
+            player::player class object
+                A player object containing information on its location
+        """
+        # check to see if the player is at the door
+        door_collision = self.collision_test(player.rect, [door.get_door()])
+        # if the collision list is greater than zero, player is at door
+        if door_collision:
+            door.player_at_door = True
+        # otherwise, player is not at door
+        # else:
+            # door.player_at_door = False
+        # attempt to raise door. If nobody is at door, try to close the door
+        # door.try_raise_door()
+
     def check_for_door_open(self, door: FireDoor | WaterDoor, player: Character):
         """
         Check to see if a player is at the door.
@@ -384,7 +414,7 @@ class Game:
         door.try_raise_door()
 
     @staticmethod
-    def level_is_done(doors):
+    def level_is_done(doors: list[FireDoor | WaterDoor]):
         """
         Check to see if the level is complete
 

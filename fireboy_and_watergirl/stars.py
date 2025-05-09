@@ -16,6 +16,8 @@ class Stars:
         self.load_images()
         self.make_rects()
 
+        self.reward_given = False
+
     def load_images(self):
         """
         Load the star image.
@@ -40,6 +42,12 @@ class Stars:
                         self.star_image.get_width(),
                         self.star_image.get_height())
         )
+
+    def get_position(self):
+        """
+        Return the position of the star.
+        """
+        return self.postion
 
     def check_for_collection(self, players):
         """

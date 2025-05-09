@@ -12,7 +12,7 @@ class Character:
         self.moving_left = False
         self.jumping = False
         self.y_velocity = 0
-        self.air_timer = 0
+        self.can_jump = True
         # current state
         self._alive = True
 
@@ -21,10 +21,10 @@ class Character:
         Set motion and physics constants and calculate movement
         """
 
-        MOVEMENT_MULTIPLIER = 5
+        MOVEMENT_MULTIPLIER = 4
         # Motion constants
-        LATERAL_SPEED = 3 * MOVEMENT_MULTIPLIER
-        JUMP_SPEED = -5 * 3
+        LATERAL_SPEED = 4 * MOVEMENT_MULTIPLIER
+        JUMP_SPEED = -5 * 4
         GRAVITY = 0.2 * MOVEMENT_MULTIPLIER
         TERMINAL_VELOCITY = 3 * MOVEMENT_MULTIPLIER
 
@@ -37,7 +37,7 @@ class Character:
             self._movement[0] = -LATERAL_SPEED
 
         # calculate vertical movement
-        if self.jumping:
+        if self.jumping and self.can_jump:
             self.y_velocity = JUMP_SPEED
             self.jumping = False
         self._movement[1] += self.y_velocity
