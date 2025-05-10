@@ -45,7 +45,7 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 4
+    num_envs: int = 32  # 4
     """the number of parallel game environments"""
     num_steps: int = 400 * 20  # 128
     """the number of steps to run in each environment per policy rollout"""
@@ -169,7 +169,7 @@ if __name__ == "__main__":
         "cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    envs = gym.vector.SyncVectorEnv(
+    envs = gym.vector.AsyncVectorEnv(
         [make_env(args.env_id, i, args.capture_video, run_name)
          for i in range(args.num_envs)],
     )

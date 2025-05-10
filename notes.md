@@ -14,3 +14,15 @@ PPO lernt:
 DQN lernt:
   - FireboyAndWatergirl-dqn-v0____1__1746614374
   - aber nicht so gut wie PPO, vllt weil Catastrophic forgetting?
+Mittwoch Fazit:
+- nicht ins Feuer/Wasser zu laufen kann gelernt werden
+- aber Exploration ist sehr schwierig
+  - mehr Zeit hilft nicht
+  - mehr ENvs helfen nicht
+  - Hyperparametertuning hilft nicht
+- ich muss für jeden Schritt eine Belohnung geben
+- Warum nicht einfach auf jedes "Luft"-TIle einen alternierenden Stern
+  --> visitedBlocks, irgendwann Belohnung für leere Tiles -> fürs Erkunden, 
+- ppo: huge performance increase through Async
+  -  27min für 4Mio bei 16 ENvs
+  -  23min für 4Mio bei 32 ENvs
