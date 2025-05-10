@@ -1,12 +1,9 @@
-import pygame
-from pygame.locals import *
+from fireboy_and_watergirl.rect import Rect
 
 
 class Character:
-    def __init__(self, postion):
-        self.rect = pygame.Rect(
-            postion[0], postion[1], self.image.get_width(),
-            self.image.get_height())
+    def __init__(self, position):
+        self.rect = Rect(position[0], position[1], 16, 32)
         # motion
         self.moving_right = False
         self.moving_left = False
@@ -79,19 +76,19 @@ class Character:
 
 class FireBoy(Character):
     def __init__(self, location):
-        self.image = pygame.image.load(
-            './fireboy_and_watergirl/data/player_images/fireboy.png')
-        self.side_image = pygame.image.load(
-            './fireboy_and_watergirl/data/player_images/fireboy-side.png')
+        # self.image = pygame.image.load(
+        #     './fireboy_and_watergirl/data/player_images/fireboy.png')
+        # self.side_image = pygame.image.load(
+        #     './fireboy_and_watergirl/data/player_images/fireboy-side.png')
         self._type = "fire"
         super().__init__(location)
 
 
 class WaterGirl(Character):
     def __init__(self, location):
-        self.image = pygame.image.load(
-            './fireboy_and_watergirl/data/player_images/watergirl.png')
-        self.side_image = pygame.image.load(
-            './fireboy_and_watergirl/data/player_images/watergirl-side.png')
+        # self.image = pygame.image.load(
+        #     './fireboy_and_watergirl/data/player_images/watergirl.png')
+        # self.side_image = pygame.image.load(
+        #     './fireboy_and_watergirl/data/player_images/watergirl-side.png')
         self._type = "water"
         super().__init__(location)

@@ -1,101 +1,21 @@
-import pygame
-from pygame.locals import *
+from fireboy_and_watergirl.rect import Rect
 
 
 class Board:
     def __init__(self, path):
-        """
-        Args:
-            path::str
-                A path to a text file containing block placements
-        """
         self.CHUNK_SIZE = 16
         self.load_map(path)
-        self.load_images()
         self.make_solid_blocks()
         self.make_water_pools()
         self.make_lava_pools()
         self.make_goo_pools()
 
     def load_map(self, path):
-        '''
-        Create an array which contains the type of every chunk on the map.
-
-        Each level map is made up of 24x32 chunks. Each type of chunk has
-        specific texture and properties. Each unique chunks type has a
-        unique string value.
-
-        Args:
-            path::str
-                path to txt file containing chunk data
-        '''
         self._game_map = []
-
         with open(path) as f:
             for line in f:
                 line = line.strip().split(',')  # convert string to list of str
                 self._game_map.append(line)
-
-    def get_game_map(self):
-        """
-        Return game map
-        """
-        return self._game_map
-
-    def set_game_map(self, game_map):
-        """
-        Set game map to new game map
-        """
-        self._game_map = game_map
-
-    def load_images(self):
-        """
-        Load all images needed to draw level background and platforms.
-
-        Load in level background.Load all board chunk textures from local
-        folder "data/board_textures and save textures in a dictionary.
-        """
-        self._background = pygame.image.load(
-            './fireboy_and_watergirl/data/board_textures/wall.png')
-        # create dictionary that maps a string to a board texture
-        self._board_textures = {
-            "2": pygame.image.load('./fireboy_and_watergirl/data/board_textures/lava.png'),
-            "3": pygame.image.load('./fireboy_and_watergirl/data/board_textures/water.png'),
-            "4": pygame.image.load('./fireboy_and_watergirl/data/board_textures/goo.png'),
-
-            # new codes
-            "S": pygame.image.load('./fireboy_and_watergirl/data/board_textures/stone.png'),
-            "W": pygame.image.load('./fireboy_and_watergirl/data/board_textures/water.png'),
-            "L": pygame.image.load('./fireboy_and_watergirl/data/board_textures/lava.png'),
-            "G": pygame.image.load('./fireboy_and_watergirl/data/board_textures/goo.png'),
-
-            "f": pygame.image.load('./fireboy_and_watergirl/data/player_images/fireboy.png'),
-            "w": pygame.image.load('./fireboy_and_watergirl/data/player_images/watergirl.png'),
-
-            "a": pygame.image.load('./fireboy_and_watergirl/data/board_textures/fireboy_star.png'),
-            "b": pygame.image.load('./fireboy_and_watergirl/data/board_textures/watergirl_star.png'),
-
-            "P": pygame.image.load('./fireboy_and_watergirl/data/gates_and_plates/plate.png'),
-            "D": pygame.image.load('./fireboy_and_watergirl/data/door_images/door_frame.png'),
-
-            "A": pygame.image.load('./fireboy_and_watergirl/data/door_images/fire_door.png'),
-            "B": pygame.image.load('./fireboy_and_watergirl/data/door_images/water_door.png'),
-        }
-        # set the colorkey for each image in dictionary
-        for texture in self._board_textures.keys():
-            self._board_textures[texture].set_colorkey((255, 0, 255))
-
-    def get_background(self):
-        """
-        Return image of level background
-        """
-        return self._background
-
-    def get_board_textures(self):
-        """
-        Return dictionary containing board images
-        """
-        return self._board_textures
 
     def make_solid_blocks(self):
         """
@@ -110,20 +30,20 @@ class Board:
                 if tile not in [' ', '0', '2', '3', '4', 'L', 'W', 'G', 'a', 'b', 'P', 'D', 'A', 'B']:
                     # create a 16 x 16 rect and add it to the list
                     self._solid_blocks.append(
-                        pygame.Rect(x * self.CHUNK_SIZE, y * self.CHUNK_SIZE,
-                                    self.CHUNK_SIZE, self.CHUNK_SIZE))
+                        Rect(x * self.CHUNK_SIZE, y * self.CHUNK_SIZE,
+                             self.CHUNK_SIZE, self.CHUNK_SIZE)
+                    )
+
+    def get_level_data(self):
+        """
+        Return level data
+        """
+        return self._game_map
 
     def get_solid_blocks(self):
-        """
-        Return a list of pygame rects that are solid.
-        """
         return self._solid_blocks
 
     def make_lava_pools(self):
-        """
-        Create list containing lava pool rects
-        """
-        # create an empty list to store lava pool rects
         self._lava_pools = []
         for y, row in enumerate(self._game_map):
             for x, tile in enumerate(row):
@@ -131,9 +51,9 @@ class Board:
                 if tile == "2" or tile == "L":
                     # add a 16x8 rect to the list
                     self._lava_pools.append(
-                        pygame.Rect(x * self.CHUNK_SIZE, y * self.CHUNK_SIZE
-                                    + self.CHUNK_SIZE / 2, self.CHUNK_SIZE,
-                                    self.CHUNK_SIZE / 2))
+                        Rect(x * self.CHUNK_SIZE, y * self.CHUNK_SIZE + self.CHUNK_SIZE / 2,
+                             self.CHUNK_SIZE, self.CHUNK_SIZE / 2)
+                    )
 
     def get_lava_pools(self):
         """
@@ -153,21 +73,14 @@ class Board:
                 if tile == "3" or tile == "W":
                     # add a 16x8 rect to the list
                     self._water_pools.append(
-                        pygame.Rect(x * self.CHUNK_SIZE, y * self.CHUNK_SIZE
-                                    + self.CHUNK_SIZE / 2, self.CHUNK_SIZE,
-                                    self.CHUNK_SIZE / 2))
+                        Rect(x * self.CHUNK_SIZE, y * self.CHUNK_SIZE + self.CHUNK_SIZE / 2,
+                             self.CHUNK_SIZE, self.CHUNK_SIZE / 2)
+                    )
 
     def get_water_pools(self):
-        """
-        Return list containing water pool rects
-        """
         return self._water_pools
 
     def make_goo_pools(self):
-        """
-        Create list containing goo pool rects
-        """
-        # create an empty list to store goo rects
         self._goo_pools = []
         for y, row in enumerate(self._game_map):
             for x, tile in enumerate(row):
@@ -175,9 +88,9 @@ class Board:
                 if tile == "4" or tile == "G":
                     # add a 16x8 rect to the list
                     self._goo_pools.append(
-                        pygame.Rect(x * self.CHUNK_SIZE, y * self.CHUNK_SIZE
-                                    + self.CHUNK_SIZE / 2, self.CHUNK_SIZE,
-                                    self.CHUNK_SIZE / 2))
+                        Rect(x * self.CHUNK_SIZE, y * self.CHUNK_SIZE + self.CHUNK_SIZE / 2,
+                             self.CHUNK_SIZE, self.CHUNK_SIZE / 2)
+                    )
 
     def get_goo_pools(self):
         """

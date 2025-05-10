@@ -1,7 +1,4 @@
 import random
-import sys
-import pygame
-from pygame.locals import *
 
 from fireboy_and_watergirl.character import Character
 
@@ -78,13 +75,13 @@ class Controller:
         Returns:
             True if key is pressed, False otherwise
         """
-        for event in events:
-            if event.type == QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == KEYDOWN:
-                if event.key == key:
-                    return True
+        # for event in events:
+        # if event.type == QUIT:
+        #     # pygame.quit()
+        #     sys.exit()
+        # elif event.type == KEYDOWN:
+        #     if event.key == key:
+        #         return True
         return False
 
 
@@ -92,9 +89,9 @@ class ArrowsController(Controller):
     # set what keys control what action via dictionary
     def __init__(self):
         self._controls = {
-            "left": K_LEFT,
-            "right": K_RIGHT,
-            "up": K_UP
+            # "left": K_LEFT,
+            # "right": K_RIGHT,
+            # "up": K_UP
         }
         super().__init__()
 
@@ -103,9 +100,9 @@ class WASDController(Controller):
     def __init__(self):
         # set what keys control what action via dictionary
         self._controls = {
-            "left": K_a,
-            "right": K_d,
-            "up": K_w
+            # "left": K_a,
+            # "right": K_d,
+            # "up": K_w
         }
         super().__init__()
 

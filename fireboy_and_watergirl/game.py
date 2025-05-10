@@ -1,9 +1,8 @@
-import pygame
-from pygame.locals import *
 
 from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import Character
 from fireboy_and_watergirl.doors import FireDoor, WaterDoor
+from fireboy_and_watergirl.rect import Rect
 from fireboy_and_watergirl.stars import Stars
 
 
@@ -70,9 +69,9 @@ class Game:
         """
         new_window_size, center_cords = self.adjust_scale()
         # scale internal display to match window)
-        new_disp = pygame.transform.scale(self.display, new_window_size)
-        self.screen.blit(new_disp, center_cords)
-        pygame.display.update()
+        # new_disp = pygame.transform.scale(self.display, new_window_size)
+        # self.screen.blit(new_disp, center_cords)
+        # pygame.display.update()
 
     def adjust_scale(self):
         """
@@ -114,7 +113,7 @@ class Game:
                 board class object that contains information on chunk images
                 and their locations
         """
-        self.display.blit(board.get_background(), (0, 0))
+        # self.display.blit(board.get_background(), (0, 0))
 
     def draw_board(self, board: Board):
         """
@@ -143,13 +142,13 @@ class Game:
             gates::[gate object, ...]
                 A list of gate objects with image and location information.
         """
-        for gate in gates:
-            # display gate
-            self.display.blit(gate.gate_image, gate.gate_location)
+        # for gate in gates:
+        #     # display gate
+        #     self.display.blit(gate.gate_image, gate.gate_location)
 
-            for location in gate.plate_locations:
-                # display plate location
-                self.display.blit(gate.plate_image, location)
+        #     for location in gate.plate_locations:
+        #         # display plate location
+        #         self.display.blit(gate.plate_image, location)
 
     def draw_doors(self, doors):
         """
@@ -160,13 +159,13 @@ class Game:
                 A list of door class objects containing image and location
                 information of door, door background, and fame.
         """
-        for door in doors:
-            # draw door background
-            self.display.blit(door.door_background, door.background_location)
-            # draw door
-            self.display.blit(door.door_image, door.door_location)
-            # draw door frame
-            self.display.blit(door.frame_image, door.frame_location)
+        # for door in doors:
+        #     # draw door background
+        #     self.display.blit(door.door_background, door.background_location)
+        #     # draw door
+        #     self.display.blit(door.door_image, door.door_location)
+        #     # draw door frame
+        #     self.display.blit(door.frame_image, door.frame_location)
 
     def draw_player(self, players: list[Character]):
         """
@@ -180,16 +179,16 @@ class Game:
                 a list of player objects that contains movement data as well as
                 different images, one for each direction it can face.
         """
-        for player in players:
-            if player.moving_right:
-                player_image = player.side_image
-            elif player.moving_left:
-                player_image = pygame.transform.flip(
-                    player.side_image, True, False)
-            else:
-                player_image = player.image
-            player_image.set_colorkey((255, 0, 255))
-            self.display.blit(player_image, (player.rect.x, player.rect.y))
+        # for player in players:
+        #     if player.moving_right:
+        #         player_image = player.side_image
+        #     elif player.moving_left:
+        #         player_image = pygame.transform.flip(
+        #             player.side_image, True, False)
+        #     else:
+        #         player_image = player.image
+        #     player_image.set_colorkey((255, 0, 255))
+        #     self.display.blit(player_image, (player.rect.x, player.rect.y))
 
     def draw_stars(self, stars):
         """
@@ -198,89 +197,83 @@ class Game:
         Args:
             screen (pygame.Surface): The game screen to draw on.
         """
-        for i, star in enumerate(stars):
-            if not star.is_collected:  # Only draw uncollected stars
-                self.display.blit(
-                    star.star_image, (star.star_location[0], star.star_location[1]))
+        # for i, star in enumerate(stars):
+        #     if not star.is_collected:  # Only draw uncollected stars
+        #         self.display.blit(
+        #             star.star_image, (star.star_location[0], star.star_location[1]))
 
-    def move_player(self, board: Board, gates: list[FireDoor | WaterDoor], players: list[Character]):
+    def move_player(self, board: Board, doors: list[FireDoor | WaterDoor], players: list[Character]):
         """
         Move player
 
         This function primarily deals with collisions. The function moves the
-        player than checks for collisions with the board and gates. It then
+        player then checks for collisions with the board and gates. It then
         adjusts the location of the player to account for these collisions.
 
         Args:
             board::board class object
                 board class object that contains information on where solid
-                where.
-            gates::[gate object, ...]
-                A list of gate class objects that contains information on where
-                the solid aspects of the gate are.
+                blocks are.
+            doors::[door object, ...]
+                A list of door class objects that contains information on where
+                the solid aspects of the door are.
             players::[player object, player object]
                 A list of player objects that contain information on movement
                 and position.
         """
+        # Get the level boundaries
+        level_width = len(board.get_level_data()[0]) * board.CHUNK_SIZE
+        level_height = len(board.get_level_data()) * board.CHUNK_SIZE
+
         for player in players:
-            # For each frame, calculate what it's motion is
             player.calc_movement()
             movement = player.get_movement()
 
-            # create a list of solid blocks
             collide_blocks = board.get_solid_blocks()
-            # add solid blocks from each gates
-            for gate in gates:
-                collide_blocks += gate.get_solid_blocks()
+            collision_types = {'top': False,
+                               'bottom': False, 'right': False, 'left': False}
 
-            # create dictionary for which side the player is colliding on
-            collision_types = {
-                'top': False,
-                'bottom': False,
-                'right': False,
-                'left': False}
-
-            # try mong the player laterally
+            # Try moving the player horizontally
             player.rect.x += movement[0]
-            # get a list of all blocks that the player is colliding with.
             hit_list = self.collision_test(player.rect, collide_blocks)
             for tile in hit_list:
-                # if player is moving right
-                if movement[0] > 0:
-                    # set right side of player to be left side of tile
-                    player.rect.right = tile.left
+                if movement[0] > 0:  # Moving right
+                    player.rect.x = tile.left - player.rect.width
                     collision_types['right'] = True
-                # if player is moving left
-                elif movement[0] < 0:
-                    # set left side of player to be right side of tile
-                    player.rect.left = tile.right
+                elif movement[0] < 0:  # Moving left
+                    player.rect.x = tile.right
                     collision_types['left'] = True
 
-            # try moving the player vertically
+            # Clamp the player's horizontal position within the level boundaries
+            if player.rect.left < 0:
+                player.rect.x = 0
+            if player.rect.right > level_width:
+                player.rect.x = level_width - player.rect.width
+
+            # Try moving the player vertically
             player.rect.y += movement[1]
-            # get a list of all blocks that the player is colliding with.
             hit_list = self.collision_test(player.rect, collide_blocks)
             for tile in hit_list:
-                # if player is moving down
-                if movement[1] > 0:
-                    # set bottom of player to top of tile
-                    player.rect.bottom = tile.top
+                if movement[1] > 0:  # Moving down
+                    player.rect.y = tile.top - player.rect.height
                     collision_types['bottom'] = True
-                # if player is moving up
-                elif movement[1] < 0:
-                    # set top of player to bottom of tile
-                    player.rect.top = tile.bottom
+                elif movement[1] < 0:  # Moving up
+                    player.rect.y = tile.bottom
                     collision_types['top'] = True
 
-            # if player hits ground, lose all y_velocity
-            # if player hits ground, reset air_timer
+            # Clamp the player's vertical position within the level boundaries
+            if player.rect.top < 0:
+                player.rect.y = 0
+            if player.rect.bottom > level_height:
+                player.rect.y = level_height - player.rect.height
+
+            # Handle collisions
             if collision_types['bottom']:
                 player.y_velocity = 0
                 player.can_jump = True
             else:
                 player.can_jump = False
 
-            # if player hit head, lose all y_velocity
             if collision_types['top']:
                 player.y_velocity = 0
 
@@ -435,7 +428,7 @@ class Game:
         return is_win
 
     @staticmethod
-    def collision_test(rect, tiles):
+    def collision_test(rect: Rect, tiles: list[Rect]) -> list[Rect]:
         """
         Create a list of tiles a pygame rect is colliding with.
 
