@@ -1,4 +1,3 @@
-import cv2
 import gymnasium as gym
 from gymnasium import spaces
 from matplotlib import pyplot as plt
@@ -41,10 +40,10 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.state = None
         self.done = False
         # Load the level
-        self._load_level1()
+        self._load_level()
 
         self.steps = 0
-        self.max_steps = 400
+        self.max_steps = 400 * 20
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
         self.level_width = 34 - 2   # Assuming 1-tile border on left and right
@@ -73,6 +72,17 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.fire_boy: FireBoy = None
         self.water_girl: WaterGirl = None
 
+        fire_boy_location = (200, 336)
+        self.fire_boy = FireBoy(fire_boy_location)
+        water_girl_location = (200, 336)
+        self.water_girl = WaterGirl(water_girl_location)
+
+        fire_door_location = (64, 48)
+        fire_door = FireDoor(fire_door_location)
+        water_door_location = (128, 48)
+        water_door = WaterDoor(water_door_location)
+        self.doors = [fire_door, water_door]
+
         # Parse the level data to dynamically set up components
         for y, row in enumerate(level_data):
             for x, tile in enumerate(row):
@@ -85,22 +95,25 @@ class FireboyAndWatergirlEnv(gym.Env):
                     self.doors.append(FireDoor((x * 16, y * 16)))
                 elif tile == 'B':  # Water door
                     self.doors.append(WaterDoor((x * 16, y * 16)))
-                elif tile == 'D':  # Gate
+                # elif tile == 'D':  # Gate
                     # Add a generic gate (you can customize this further)
-                    self.gates.append(Gates((x * 16, y * 16), []))
+                    # self.gates.append(Gates((x * 16, y * 16), []))
                 # elif tile == 'P':  # Plate A
                     # Add a plate that controls a gate
                     # self.gates.append(
                     #     Plate((x * 16, y * 16), [(x * 16, y * 16)]))
+                elif tile == 'A':  # Plate B
+                    self.gates.append(
+                        FireDoor((x * 16, y * 16), [(x * 16, y * 16)]))
                 elif tile == 'B':  # Plate B
                     self.gates.append(
-                        Gates((x * 16, y * 16), [(x * 16, y * 16)]))
+                        WaterDoor((x * 16, y * 16), [(x * 16, y * 16)]))
                 elif tile == 'a':  # Gate A
                     self.stars.append(Stars([x * 16, y * 16], "fire"))
                 elif tile == 'b':  # Gate B
                     self.stars.append(Stars([x * 16, y * 16], "water"))
-                # Add more cases as needed for other tiles
 
+        # Add more cases as needed for other tiles
     def _load_level1(self):
         """
         Load the level data and initialize game components.
@@ -142,7 +155,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         Reset the environment to its initial state and return the initial observation.
         """
         super().reset(seed=seed)
-        self._load_level1()
+        self._load_level()
         self.state = self._get_state().astype(np.float32) / 255.0
         self.done = False
         self.steps = 0
@@ -165,11 +178,10 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.done = False  # self._check_done()
 
         self.steps += 1
+        if self.steps % 8000 == 0 and self.game.index % 4 == 0:
+            self._get_state(draw=True)
         if self.steps >= self.max_steps:
             self.done = True
-
-        if (self.done):
-            self._get_state(draw=True)
 
         # Optionally, provide additional info
         info = {}
@@ -387,8 +399,11 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Example: +1 for reaching the door, -1 for falling into a trap
         if self.game.level_is_done(self.doors):
             return 1  # Both characters reached their doors
-        elif self.game.check_for_death(self.board, [self.fire_boy, self.water_girl]):
-            return -1  # One of the characters died
+        # elif self.game.check_for_death(self.board, [self.fire_boy, self.water_girl]):
+        #     return -1  # One of the characters died
+
+        # self.game.check_for_at_door(self.doors, self.fire_boy)
+        # self.game.check_for_at_door(self.doors, self.water_girl)
 
         fireboy_reward = 0
         watergirl_reward = 0
@@ -396,30 +411,22 @@ class FireboyAndWatergirlEnv(gym.Env):
         for star in self.stars:
             if star.is_collected:
                 if (star._player == "fire"):
-                    fireboy_reward += 1
+                    fireboy_reward += 10
                 else:
-                    watergirl_reward += 1
+                    watergirl_reward += 10
 
-        # Reward based on proximity to the nearest star
-        def distance_to_nearest_star(player, stars):
-            player_x, player_y = player.get_position()
-            distances = [
-                np.sqrt((player_x - star.get_position()
-                        [0])**2 + (player_y - star.get_position()[1])**2)
-                for star in stars if not star.is_collected
-            ]
-            return min(distances) if distances else 0
+        # for door in self.doors:
+        #     if door.player_at_door:
+        #         print('PLAYER AT DOOR')
+        #         if (door._player == "fire"):
+        #             fireboy_reward += 100
+        #         else:
+        #             watergirl_reward += 100
+        # print(fireboy_reward, watergirl_reward)
 
-        fireboy_distance_reward = - \
-            distance_to_nearest_star(self.fire_boy, self.stars) * 0.01
-        watergirl_distance_reward = - \
-            distance_to_nearest_star(self.water_girl, self.stars) * 0.01
+        # Reward for exploring new areas
 
-        # print(fireboy_distance_reward, watergirl_distance_reward)
-
-        # Combine rewards for both agents
-        return min(fireboy_reward, watergirl_reward) + 0.1 * max(fireboy_reward, watergirl_reward)
-        return min(fireboy_distance_reward, watergirl_distance_reward) + 0.1 * max(fireboy_distance_reward, watergirl_distance_reward)
+        return 0.9*min(fireboy_reward, watergirl_reward) + 0.1 * max(fireboy_reward, watergirl_reward)
 
     def _check_done(self):
         """

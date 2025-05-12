@@ -46,7 +46,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "FireboyAndWatergirl-dqn-v0"
     """the id of the environment"""
-    total_timesteps: int = 500000
+    total_timesteps: int = 4000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -68,7 +68,7 @@ class Args:
     """the ending epsilon for exploration"""
     exploration_fraction: float = 0.5
     """the fraction of `total-timesteps` it takes from start-e to go end-e"""
-    learning_starts: int = 10000
+    learning_starts: int = 100000
     """timestep to start learning"""
     train_frequency: int = 10
     """the frequency of training"""
@@ -122,7 +122,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         )
     args = tyro.cli(Args)
     assert args.num_envs == 1, "vectorized envs are not supported at the moment"
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{args.total_timesteps}__{args.learning_rate}__{args.buffer_size}__{args.gamma}__{args.tau}__{args.target_network_frequency}__{args.batch_size}__{args.start_e}__{args.end_e}__{args.exploration_fraction}__{args.learning_starts}__{args.train_frequency}__{int(time.time())}"
     if args.track:
         import wandb
 
