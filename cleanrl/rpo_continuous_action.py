@@ -14,7 +14,7 @@ from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
 
 # Import your Fireboy and Watergirl environment to ensure it's registered
-import cleanrl.fireboy_and_wategirl_rpo
+import cleanrl.fireboy_and_watergirl_rpo
 
 
 @dataclass
@@ -37,9 +37,9 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "FireboyAndWatergirl-rpo-v0"
+    env_id: str = "FireboyAndWatergirl-rpo-v0"  # "HalfCheetah-v4"
     """the id of the environment"""
-    total_timesteps: int = 8000000
+    total_timesteps: int = 200000  # 8000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""

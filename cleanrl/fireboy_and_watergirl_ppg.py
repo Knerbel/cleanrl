@@ -1,3 +1,4 @@
+import cv2
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -27,6 +28,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Actions: 0 = Fireboy Left, 1 = Fireboy Right, 2 = Fireboy Up, 3 = Fireboy Still,
         #          4 = Watergirl Left, 5 = Watergirl Right, 6 = Watergirl Up, 7 = Watergirl Still
         self.action_space = spaces.Discrete(8)
+        # 4 actions for Fireboy, 4 actions for Watergirl
+        # self.action_space = spaces.MultiDiscrete([4, 4])
 
         # Define the observation space (feature-based representation)
         # [Fireboy_x, Fireboy_y, Watergirl_x, Watergirl_y, Gate_status, Door_status]
@@ -38,7 +41,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         # )
 
         # Initialize game components
-        self.level = "level1"
+        self.level = "level0"
         self.game = Game()  # Instantiate the Game class
         self.board = None
         self.fire_boy = None
@@ -64,61 +67,78 @@ class FireboyAndWatergirlEnv(gym.Env):
         level_height = 25
         level_width = 34
         board_size = 34 * 25
-        num_channels = 1  # Air, Stone, Lava, Water, Goo
         self.observation_space = spaces.Box(
             low=0,
             high=255,
-            # Example: (34, 25, 3)
-            shape=(level_height, level_width, num_channels),
+            shape=(level_width, level_height, 3),  # Example: (34, 25, 1)
             dtype=np.uint8
         )
 
+    def get_action_meanings(self):
+        return [
+            "NOOP",
+            "Fireboy Right",
+            "Fireboy Up",
+            "Fireboy Still",
+            "Watergirl Left",
+            "Watergirl Right",
+            "Watergirl Up",
+            "Watergirl Still",
+        ]
+
     def _load_level(self):
         """
-        Load the level data and initialize game components.
+        Load the level data from the file and dynamically set up the game components.
         """
-        if self.level == "level1":
-            self.board = Board('./fireboy_and_watergirl/data/level1.txt')
-            gate_location = (285, 128)
-            plate_locations = [(190, 168), (390, 168)]
-            gate = Gates(gate_location, plate_locations)
-            self.gates = [gate]
+        # Read the level data from the file
+        with open('./fireboy_and_watergirl/data/'+self.level+'.txt', 'r') as file:
+            level_data = [line.strip().split(',') for line in file.readlines()]
 
-            fire_door_location = (64, 48)
-            fire_door = FireDoor(fire_door_location)
-            water_door_location = (128, 48)
-            water_door = WaterDoor(water_door_location)
-            self.doors = [fire_door, water_door]
+        # Initialize game components
+        self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
+        self.gates: list[Gates] = []
+        self.doors: list[FireDoor | WaterDoor] = []
+        self.stars: list[Stars] = []
+        self.fire_boy: FireBoy = None
+        self.water_girl: WaterGirl = None
 
-            fire_boy_location = (16, 336)
-            self.fire_boy = FireBoy(fire_boy_location)
-            water_girl_location = (35, 336)
-            self.water_girl = WaterGirl(water_girl_location)
+        # Parse the level data to dynamically set up components
+        for y, row in enumerate(level_data):
+            for x, tile in enumerate(row):
+                # Assuming 16x16 tiles
+                if tile == 'f':  # Fireboy starting position
+                    self.fire_boy = FireBoy((x * 16, y * 16))
+                elif tile == 'w':  # Watergirl starting position
+                    self.water_girl = WaterGirl((x * 16, y * 16))
+                elif tile == 'A':  # Fire door
+                    self.doors.append(FireDoor((x * 16, y * 16)))
+                elif tile == 'B':  # Water door
+                    self.doors.append(WaterDoor((x * 16, y * 16)))
+                elif tile == 'D':  # Gate
+                    # Add a generic gate (you can customize this further)
+                    self.gates.append(Gates((x * 16, y * 16), []))
+                # elif tile == 'P':  # Plate A
+                    # Add a plate that controls a gate
+                    # self.gates.append(
+                    #     Plate((x * 16, y * 16), [(x * 16, y * 16)]))
+                elif tile == 'B':  # Plate B
+                    self.gates.append(
+                        Gates((x * 16, y * 16), [(x * 16, y * 16)]))
+                elif tile == 'a':  # Gate A
+                    self.stars.append(Stars([x * 16, y * 16], "fire"))
+                elif tile == 'b':  # Gate B
+                    self.stars.append(Stars([x * 16, y * 16], "water"))
+                # Add more cases as needed for other tiles
 
-            self.stars = [
-                Stars((240, 330), "fire"),
-                Stars((260, 330), "water"),
-                Stars((480, 300), "fire"),
-                Stars((500, 300), "water"),
-                Stars((370, 240), "fire"),
-                Stars((390, 240), "water"),
-                Stars((30, 200), "fire"),
-                Stars((50, 200), "water"),
-            ]
-
-            # Flatten the level 1 board into a 1D array
-            level_data = self.board.get_level_data()  # Assuming this returns a 2D array
-            # Map tile types to numeric values
-            tile_mapping = {'S': 1, 'L': 2, 'W': 3,
-                            'G': 4, ' ': 5, 'w': 6, 'f': 7}
-
-            # Convert the 2D array of tiles to a 2D array of numbers
-            level_data = [[tile_mapping[tile] for tile in row]
-                          for row in level_data]
-            self.flattened_level = np.array(level_data, dtype=np.float32).flatten(
-            ) if level_data is not None else np.array([], dtype=np.float32)
-
-        # Add more levels as needed
+        # Flatten the level data into a 1D array for the observation space
+        tile_mapping_numeric = {
+            'S': 1, ' ': 0, 'L': 2, 'W': 3, 'G': 4, 'w': 5, 'f': 6,
+            'a': 7, 'b': 8, 'P': 9, 'D': 10, 'A': 11, 'B': 12
+        }
+        level_numeric = [[tile_mapping_numeric[tile]
+                          for tile in row] for row in level_data]
+        self.flattened_level = np.array(
+            level_numeric, dtype=np.float32).flatten()
 
     def reset(self, seed=None, options=None):
         """
@@ -140,10 +160,11 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Update the game state
         self.state = self._get_state()
 
+        # Update the board map dynamically
+        self._update_board_map()
+
         # Compute reward
         reward = self._compute_reward()
-
-        print(reward)
 
         # Check if the game is done
         self.done = self._check_done()
@@ -152,6 +173,82 @@ class FireboyAndWatergirlEnv(gym.Env):
         info = {}
 
         return self.state, reward, self.done, False, info
+
+    def _update_board_map(self):
+        """
+        Update the board map dynamically based on the current state of the game.
+        """
+        # Get the current level data
+        level_data = self.board.get_level_data()
+
+        # Create a copy of the level data to modify
+        updated_level_data = [list(row) for row in level_data]
+
+        # Clear previous player positions
+        for y, row in enumerate(updated_level_data):
+            for x, tile in enumerate(row):
+                if tile in ['f', 'w']:  # Clear Fireboy and Watergirl positions
+                    updated_level_data[y][x] = ' '
+
+        # Update Fireboy's position
+        fireboy_pos = self.fire_boy.get_position()
+        if (fireboy_pos[0] > 0
+           and fireboy_pos[0] < 1000
+           and fireboy_pos[1] > 0
+           and fireboy_pos[1] < 1000):
+            # Convert to grid coordinates
+            fireboy_x, fireboy_y = min(fireboy_pos[0] // 16, 33), min(
+                fireboy_pos[1] // 16, 24)
+            # Ensure 'S' is not overwritten
+            if updated_level_data[fireboy_y][fireboy_x] != 'S':
+                updated_level_data[fireboy_y][fireboy_x] = 'f'
+
+        # Update Watergirl's position
+        watergirl_pos = self.water_girl.get_position()
+        if (watergirl_pos[0] > 0
+           and watergirl_pos[0] < 1000
+           and watergirl_pos[1] > 0
+           and watergirl_pos[1] < 1000):
+
+            # Convert to grid coordinates
+            watergirl_x, watergirl_y = min(watergirl_pos[0] // 16, 33), min(
+                watergirl_pos[1] // 16, 24)
+            # Ensure 'S' is not overwritten
+            if updated_level_data[watergirl_y][watergirl_x] != 'S':
+                updated_level_data[watergirl_y][watergirl_x] = 'w'
+
+        # Update gates and doors
+        for gate in self.gates:
+            gate_pos = gate.gate_position
+            gate_x, gate_y = gate_pos[0] // 16, gate_pos[1] // 16
+            # Ensure 'S' is not overwritten
+            if updated_level_data[gate_y][gate_x] != 'S':
+                updated_level_data[gate_y][gate_x] = 'D'
+
+        for door in self.doors:
+            door_pos = door.position
+            door_x, door_y = door_pos[0] // 16, door_pos[1] // 16
+            # Ensure 'S' is not overwritten
+            if updated_level_data[door_y][door_x] != 'S':
+                if isinstance(door, FireDoor):
+                    updated_level_data[door_y][door_x] = 'A'
+                elif isinstance(door, WaterDoor):
+                    updated_level_data[door_y][door_x] = 'B'
+
+        for star in self.stars:
+            star_pos = star.postion
+            star_x, star_y = star_pos[0] // 16, star_pos[1] // 16
+            # Ensure 'S' is not overwritten
+            if updated_level_data[star_y][star_x] != 'S':
+                # print(star.is_collected)
+                if not star.is_collected:
+                    if star._player == "fire":
+                        updated_level_data[star_y][star_x] = 'a'
+                    else:
+                        updated_level_data[star_y][star_x] = 'b'
+
+        # Update the board with the new level data
+        self.board.set_game_map(updated_level_data)
 
     def render(self, mode="human"):
         """
@@ -162,11 +259,11 @@ class FireboyAndWatergirlEnv(gym.Env):
             # Use the Game class to render the game
             self.game.draw_level_background(self.board)
             self.game.draw_board(self.board)
-            if self.gates:
-                self.game.draw_gates(self.gates)
-            self.game.draw_doors(self.doors)
-            self.game.draw_player([self.fire_boy, self.water_girl])
-            self.game.draw_stars(self.stars)
+            # if self.gates:
+            #     self.game.draw_gates(self.gates)
+            # self.game.draw_doors(self.doors)
+            # self.game.draw_player([self.fire_boy, self.water_girl])
+            # self.game.draw_stars(self.stars)
             self.game.refresh_window()
 
     def close(self):
@@ -176,71 +273,64 @@ class FireboyAndWatergirlEnv(gym.Env):
         pass
 
     def _get_state(self):
-        """
-        Return the current state of the game as a 2D array with a single channel.
-        Each tile is encoded with a specific value:
-        1: Stone, 2: Air, 3: Lava, 4: Water, 5: Gate, etc.
-        """
-        # Get the level data as a 2D array
-        # Assuming this returns a 2D array of tile characters
         level_data = self.board.get_level_data()
-
-        # Map tile types to numeric values
         tile_mapping = {
-            'S': 1,  # Stone
-            ' ': 2,  # Air
-            'L': 3,  # Lava
-            'W': 4,  # Water
-            'G': 5,  # Gate
-            'w': 6,  # Watergirl-specific tile
-            'f': 7   # Fireboy-specific tile
+            'S': 1, ' ': 0, 'L': 2, 'W': 3, 'G': 4, 'w': 5, 'f': 6,
+            'a': 7, 'b': 8, 'P': 9, 'D': 10, 'A': 11, 'B': 12
         }
-
-        # Convert the 2D array of tile characters to a 2D array of numeric values
         level_grid = np.array([[tile_mapping[tile] for tile in row]
                               for row in level_data], dtype=np.uint8)
 
-        # Return the 2D level grid as the state
-        return level_grid
+        # Resize the grid to 84x84
+        resized_grid = cv2.resize(
+            level_grid, (25, 34), interpolation=cv2.INTER_NEAREST)
+
+        # Duplicate the single channel to create an RGB image
+        rgb_image = np.stack(
+            [resized_grid, resized_grid, resized_grid], axis=-1)
+
+        return rgb_image
 
     def _apply_action(self, action):
         """
-        Update the game state based on the action.
+        Update the game state based on the discrete action.
         """
-        # Map actions to character movements
+        # Decode the single discrete action into Fireboy and Watergirl actions
+        fireboy_action = action // 4  # Integer division to get Fireboy's action
+        watergirl_action = action % 4  # Modulo to get Watergirl's action
 
-        # self.game.move_player(self.board, self.gates, [FireBoy, WaterGirl])
-        if action == 0:
+        # Map Fireboy's action
+        if fireboy_action == 0:
             self.fire_boy.moving_left = True
             self.fire_boy.moving_right = False
             self.fire_boy.jumping = False
-        elif action == 1:
+        elif fireboy_action == 1:
             self.fire_boy.moving_left = False
             self.fire_boy.moving_right = True
             self.fire_boy.jumping = False
-        elif action == 2:
-            if self.fire_boy.air_timer < 6:
-                self.fire_boy.moving_left = False
-                self.fire_boy.moving_right = False
-                self.fire_boy.jumping = True
-        elif action == 3:
-            self.fire_boy.jumping = False
+        elif fireboy_action == 2:
             self.fire_boy.moving_left = False
             self.fire_boy.moving_right = False
-        elif action == 4:
+            self.fire_boy.jumping = True
+        elif fireboy_action == 3:
+            self.fire_boy.moving_left = False
+            self.fire_boy.moving_right = False
+            self.fire_boy.jumping = False
+
+        # Map Watergirl's action
+        if watergirl_action == 0:
             self.water_girl.moving_left = True
             self.water_girl.moving_right = False
-            self.jumping = False
-        elif action == 5:
+            self.water_girl.jumping = False
+        elif watergirl_action == 1:
             self.water_girl.moving_left = False
             self.water_girl.moving_right = True
             self.water_girl.jumping = False
-        elif action == 6:
-            if self.water_girl.air_timer < 6:
-                self.water_girl.moving_left = False
-                self.water_girl.moving_right = False
-                self.water_girl.jumping = True
-        elif action == 7:
+        elif watergirl_action == 2:
+            self.water_girl.moving_left = False
+            self.water_girl.moving_right = False
+            self.water_girl.jumping = True
+        elif watergirl_action == 3:
             self.water_girl.moving_left = False
             self.water_girl.moving_right = False
             self.water_girl.jumping = False
@@ -248,10 +338,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Update the game state
         self.game.move_player(self.board, self.gates, [
                               self.fire_boy, self.water_girl])
-
         self.game.check_for_gate_press(
             self.gates, [self.fire_boy, self.water_girl])
-
         self.game.check_for_star_collected(
             self.stars, [self.fire_boy, self.water_girl])
 
@@ -390,10 +478,14 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.game.check_for_death(
                 self.board, [self.fire_boy, self.water_girl])
 
+    def lives(self):
+        # Return a dummy value (e.g., 1 life remaining)
+        return 1
+
 
 # Register the environment
 register(
-    id="FireboyAndWatergirl-ppo-v0",  # Unique ID for the environment
+    id="FireboyAndWatergirl-ppg-v0",  # Unique ID for the environment
     # Path to the environment class
     entry_point="cleanrl.fireboy_and_wategirl_ppg:FireboyAndWatergirlEnv",
 )

@@ -17,12 +17,12 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 # Import your Fireboy and Watergirl environment to ensure it's registered
-import cleanrl.fireboy_and_wategirl_ppg
+import cleanrl.fireboy_and_watergirl_ppg
 
 
-env = gym.make("FireboyAndWatergirl-ppo-v0")
-print("Environment created successfully!")
-print("Observation space:", env.observation_space)
+# env = gym.make("FireboyAndWatergirl-ppo-v0")
+# print("Environment created successfully!")
+# print("Observation space:", env.observation_space)
 
 
 @dataclass
@@ -33,7 +33,7 @@ class Args:
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
+    cuda: bool = False
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
@@ -45,9 +45,9 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "FireboyAndWatergirl-v0"  # "starpilot"
+    env_id: str = "CartPole-v1"
     """the id of the environment"""
-    total_timesteps: int = int(10e6)
+    total_timesteps: int = int(10e5)
     """total timesteps of the experiments"""
     learning_rate: float = 5e-4
     """the learning rate of the optimizer"""
@@ -270,9 +270,11 @@ if __name__ == "__main__":
     device = torch.device(
         "cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
+    print('test')
     # env setup
     envs = ProcgenEnv(num_envs=args.num_envs, env_name=args.env_id,
                       num_levels=0, start_level=0, distribution_mode="easy")
+    print(envs)
     envs = gym.wrappers.TransformObservation(envs, lambda obs: obs["rgb"])
     envs.single_action_space = envs.action_space
     envs.single_observation_space = envs.observation_space["rgb"]
@@ -283,8 +285,8 @@ if __name__ == "__main__":
     envs = gym.wrappers.NormalizeReward(envs, gamma=args.gamma)
     envs = gym.wrappers.TransformReward(
         envs, lambda reward: np.clip(reward, -10, 10))
-    assert isinstance(envs.single_action_space,
-                      gym.spaces.Discrete), "only discrete action space is supported"
+    # assert isinstance(envs.single_action_space,
+    #                   gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-8)
@@ -310,6 +312,7 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
 
     for phase in range(1, args.num_phases + 1):
+        print(f"Phase {phase}/{args.num_phases}")
 
         # POLICY PHASE
         for update in range(1, args.n_iteration + 1):
