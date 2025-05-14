@@ -34,12 +34,10 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.water_girl = None
         self.gates = None
         self.doors = None
-        # self.controller = GeneralController()
 
         # Initialize game state
         self.state = None
         self.done = False
-        # Load the level
         self._load_level()
 
         self.steps = 0
@@ -48,13 +46,21 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
         self.level_width = 34 - 2   # Assuming 1-tile border on left and right
         self.num_channels = 3       # RGB channels
-        # Define the flattened observation space
+        # Define the flattened observation space for 3 stacked frames
         self.observation_space = spaces.Box(
             low=0,
             high=255,
-            shape=(self.level_height * self.level_width * self.num_channels,),
-            dtype=np.float32
+            shape=(self.level_height * self.level_width *
+                   self.num_channels * 3,),
+            dtype=np.uint8
         )
+
+        # Initialize a queue to store the last 3 observations
+        self.observation_history = [np.zeros(
+            (self.level_height * self.level_width * self.num_channels,), dtype=np.uint8) for _ in range(3)]
+
+        self.explored_tiles_fb = set()
+        self.explored_tiles_wg = set()
 
     def _load_level(self):
         """
@@ -114,41 +120,6 @@ class FireboyAndWatergirlEnv(gym.Env):
                     self.stars.append(Stars([x * 16, y * 16], "water"))
 
         # Add more cases as needed for other tiles
-    def _load_level1(self):
-        """
-        Load the level data and initialize game components.
-        """
-        if self.level == "level1" or self.level == "level1b":
-            self.board = Board('./fireboy_and_watergirl/data/level1b.txt')
-            gate_location = (285, 128)
-            plate_locations = [(190, 168), (390, 168)]
-            gate = Gates(gate_location, plate_locations)
-            self.gates = [gate]
-
-            fire_door_location = (64, 48)
-            fire_door = FireDoor(fire_door_location)
-            water_door_location = (128, 48)
-            water_door = WaterDoor(water_door_location)
-            self.doors = [fire_door, water_door]
-
-            fire_boy_location = (16, 336)
-            self.fire_boy = FireBoy(fire_boy_location)
-            water_girl_location = (35, 336)
-            self.water_girl = WaterGirl(water_girl_location)
-
-            self.stars = [
-                Stars((240, 330), "fire"),
-                Stars((260, 330), "water"),
-
-                Stars((480, 300), "fire"),
-                Stars((500, 300), "water"),
-
-                Stars((370, 240), "fire"),
-                Stars((390, 240), "water"),
-
-                Stars((30, 200), "fire"),
-                Stars((50, 200), "water"),
-            ]
 
     def reset(self, seed=None, options=None):
         """
@@ -156,9 +127,16 @@ class FireboyAndWatergirlEnv(gym.Env):
         """
         super().reset(seed=seed)
         self._load_level()
-        self.state = self._get_state().astype(np.float32) / 255.0
+        self.state = self._get_state()
+        self.explored_tiles_fb = set()
+        self.explored_tiles_wg = set()
         self.done = False
         self.steps = 0
+
+        # Reset the observation history
+        self.observation_history = [np.zeros(
+            (self.level_height * self.level_width * self.num_channels,), dtype=np.uint8) for _ in range(3)]
+
         return self.state, {}
 
     def step(self, action):
@@ -167,9 +145,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         """
         # Apply the action to the characters
         self._apply_action(action)
-
         # Update the game state
-        self.state = self._get_state().astype(np.float32) / 255.0
+        self.state = self._get_state()
 
         # Compute reward
         reward = self._compute_reward()
@@ -178,7 +155,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.done = False  # self._check_done()
 
         self.steps += 1
-        if self.steps % 1000 == 0:  # and self.game.index % 4 == 0:
+        if self.steps % 800 == 0 and self.game.index % 4 == 0:
             self._get_state(draw=True)
         if self.steps >= self.max_steps:
             self.done = True
@@ -256,15 +233,12 @@ class FireboyAndWatergirlEnv(gym.Env):
 
     def _get_state(self, draw=False):
         level_data = self.board.get_level_data()
-
         # Ignore the outer border (typically 1 tile) since it's always constant
         border_size = 1  # Assuming outer wall is 1 tile thick
-
         # Initialize empty RGB grid for the inner area only
         inner_height = len(level_data) - (2 * border_size)
         inner_width = len(level_data[0]) - (2 * border_size)
         rgb_image = np.zeros((inner_height, inner_width, 3), dtype=np.uint8)
-
         # Fill the RGB image based on the inner level data
         color_mapping = {
             ' ': [255, 255, 255],  # Air - white
@@ -281,29 +255,12 @@ class FireboyAndWatergirlEnv(gym.Env):
             'P': [150, 150, 150],  # Pressure plate - gray
             'D': [200, 200, 100],  # Gate - yellow-ish
         }
-
         for y in range(border_size, len(level_data) - border_size):
             for x in range(border_size, len(level_data[0]) - border_size):
                 inner_y = y - border_size
                 inner_x = x - border_size
                 rgb_image[inner_y, inner_x] = color_mapping.get(
                     level_data[y][x], [100, 100, 100])  # Default gray for unknown tiles
-
-        # Add dynamic elements (characters, stars, etc.)
-        if self.fire_boy:
-            fb_x, fb_y = self.fire_boy.get_position()
-            fb_x, fb_y = int(fb_x // 16) - \
-                border_size, int(fb_y // 16) - border_size
-            if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
-                rgb_image[fb_y, fb_x] = color_mapping['f']
-
-        if self.water_girl:
-            wg_x, wg_y = self.water_girl.get_position()
-            wg_x, wg_y = int(wg_x // 16) - \
-                border_size, int(wg_y // 16) - border_size
-            if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
-                rgb_image[wg_y, wg_x] = color_mapping['w']
-
         # Add stars to the image
         for star in self.stars:
             if not star.is_collected:
@@ -316,29 +273,69 @@ class FireboyAndWatergirlEnv(gym.Env):
                         rgb_image[s_y, s_x] = color_mapping['a']  # Fire star
                     else:
                         rgb_image[s_y, s_x] = color_mapping['b']  # Water star
+            else:
+                s_x, s_y = star.get_position()
+                # Convert to grid coordinates and adjust for border
+                s_x, s_y = int(s_x // 16) - \
+                    border_size, int(s_y // 16) - border_size
+                if 0 <= s_y < rgb_image.shape[0] and 0 <= s_x < rgb_image.shape[1]:
+                    rgb_image[s_y, s_x] = color_mapping[' ']
+
+        # Add dynamic elements (characters, stars, etc.)
+        if self.fire_boy:
+            fb_x, fb_y = self.fire_boy.get_position()
+            fb_x, fb_y = int(fb_x // 16) - 1, int(fb_y // 16)
+            if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
+                rgb_image[fb_y, fb_x] = color_mapping['f']
+            else:
+                if self.game.index == 1:
+                    print(f"Fireboy position out of bounds: ({fb_x}, {fb_y})")
+
+        if self.water_girl:
+            wg_x, wg_y = self.water_girl.get_position()
+            wg_x, wg_y = int(wg_x // 16)-1, int(wg_y // 16)
+            if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
+                rgb_image[wg_y, wg_x] = color_mapping['w']
+            else:
+                if self.game.index == 1:
+                    print(
+                        f"watergirl position out of bounds: ({fb_x}, {fb_y})")
 
         # Flatten the RGB image
         flattened_image = rgb_image.flatten()
+        # Update the observation history only if the state has changed
+        if not np.array_equal(flattened_image, self.observation_history[-1]):
+            self.observation_history.pop(0)  # Remove the oldest observation
+            # Add the current observation
+            self.observation_history.append(flattened_image)
 
+        # Stack the last 3 observations
+        stacked_observation = np.concatenate(self.observation_history, axis=0)
         # Save image if requested
         if draw:
-            plt.figure(figsize=(10, 8))
-            plt.imshow(rgb_image)
+            # Reshape each frame back to its original shape
+            frames = [obs.reshape((inner_height, inner_width, 3))
+                      for obs in self.observation_history]
+
+            # Concatenate frames side by side
+            side_by_side_image = np.concatenate(frames, axis=1)
+
+            # Plot and save the image
+            plt.figure(figsize=(15, 5))
+            plt.imshow(side_by_side_image)
             plt.axis('off')
             plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-            plt.savefig(f"observation.png", bbox_inches='tight', pad_inches=0)
+            plt.savefig(f"stacked_observation.png",
+                        bbox_inches='tight', pad_inches=0)
             plt.close()
 
-        return flattened_image
+        return stacked_observation
 
     def _apply_action(self, action):
         """
         Update the game state based on the discrete action.
         """
         # Decode the single discrete action into Fireboy and Watergirl actions
-        # fireboy_action = action // 4  # Integer division to get Fireboy's action
-        # watergirl_action = action % 4  # Modulo to get Watergirl's action
-
         fireboy_action = 3
         watergirl_action = 3
 
@@ -396,39 +393,37 @@ class FireboyAndWatergirlEnv(gym.Env):
         """
         Compute the reward for the current state.
         """
-        # Example: +1 for reaching the door, -1 for falling into a trap
-        if self.game.level_is_done(self.doors):
-            return 1  # Both characters reached their doors
-        # elif self.game.check_for_death(self.board, [self.fire_boy, self.water_girl]):
-        #     return -1  # One of the characters died
+        reward = 0
 
-        # self.game.check_for_at_door(self.doors, self.fire_boy)
-        # self.game.check_for_at_door(self.doors, self.water_girl)
+        # 1. Reward for exploring new tiles
+        fireboy_position = tuple(self.fire_boy.get_position())
+        watergirl_position = tuple(self.water_girl.get_position())
 
-        fireboy_reward = 0
-        watergirl_reward = 0
+        # Fireboy explores a new tile
+        # if fireboy_position not in self.explored_tiles_fb:
+        #     self.explored_tiles_fb.add(fireboy_position)
+        #     reward += 0.01
+
+        # # Watergirl explores a new tile
+        # if watergirl_position not in self.explored_tiles_wg:
+        #     self.explored_tiles_wg.add(watergirl_position)
+        #     reward += 0.01
+
+        # 2. Time penalty for each step
+        reward -= 0.001
 
         for star in self.stars:
-            if star.is_collected and not star.reward_given:
-                if star._player == "fire":
-                    fireboy_reward += 0.05
+            if star.is_collected:
+                if (star._player == "fire"):
+                    reward += 0.1
                 else:
-                    watergirl_reward += 0.05
-                # star.reward_given = True
+                    reward += 0.1
 
-        for door in self.doors:
-            if door.player_at_door and not door.reward_given:
-                print('PLAYER AT DOOR')
-                if (door._player == "fire"):
-                    fireboy_reward += 0.4
-                else:
-                    watergirl_reward += 0.4
-                # door.reward_given = True
-        # print(fireboy_reward, watergirl_reward)
+        # 3. Reward for reaching the goal (doors)
+        if self.game.level_is_done(self.doors):
+            reward += 1  # Both characters reached their doors
 
-        # Reward for exploring new areas
-
-        return (0.9*min(fireboy_reward, watergirl_reward) + 0.1 * max(fireboy_reward, watergirl_reward))
+        return reward
 
     def _check_done(self):
         """
@@ -443,7 +438,7 @@ class FireboyAndWatergirlEnv(gym.Env):
 
 # Register the environment
 register(
-    id="FireboyAndWatergirl-dqn-v0",  # Unique ID for the environment
+    id="FireboyAndWatergirl-ppo-v3",  # Unique ID for the environment
     # Path to the environment class
-    entry_point="cleanrl.fireboy_and_watergirl_dqn:FireboyAndWatergirlEnv",
+    entry_point="cleanrl.fireboy_and_watergirl_ppo_v3:FireboyAndWatergirlEnv",
 )

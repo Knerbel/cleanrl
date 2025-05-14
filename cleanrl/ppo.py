@@ -14,7 +14,7 @@ from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
 # Import your Fireboy and Watergirl environment to ensure it's registered
-import cleanrl.fireboy_and_watergirl_ppo
+import cleanrl.fireboy_and_watergirl_ppo_v3
 
 
 @dataclass
@@ -39,19 +39,20 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "FireboyAndWatergirl-ppo-v0"  # "CartPole-v1"
+    # env_id: str = "FireboyAndWatergirl-ppo-v0"  # "CartPole-v1"
+    env_id: str = "FireboyAndWatergirl-ppo-v3"  # "CartPole-v1"
     """the id of the environment"""
     total_timesteps: int = 4000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 32  # 4
+    num_envs: int = 4
     """the number of parallel game environments"""
     num_steps: int = 400 * 20  # 128
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = False
     """Toggle learning rate annealing for policy and value networks"""
-    gamma: float = 0.99
+    gamma: float = 0.997
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
@@ -61,11 +62,11 @@ class Args:
     """the K epochs to update the policy"""
     norm_adv: bool = True
     """Toggles advantages normalization"""
-    clip_coef: float = 0.2
+    clip_coef: float = 0.1
     """the surrogate clipping coefficient"""
     clip_vloss: bool = True
     """Toggles whether or not to use a clipped loss for the value function, as per the paper."""
-    ent_coef: float = 0.01  # 0.001
+    ent_coef: float = 0.02  # 0.001
     """coefficient of the entropy"""
     vf_coef: float = 0.5
     """coefficient of the value function"""
@@ -169,7 +170,7 @@ if __name__ == "__main__":
         "cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    envs = gym.vector.SyncVectorEnv(
+    envs = gym.vector.AsyncVectorEnv(
         [make_env(args.env_id, i, args.capture_video, run_name)
          for i in range(args.num_envs)],
     )

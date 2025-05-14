@@ -26,3 +26,11 @@ Mittwoch Fazit:
 - ppo: huge performance increase through Async
   -  27min für 4Mio bei 16 ENvs
   -  23min für 4Mio bei 32 ENvs
+-  good run: FireboyAndWatergirl-dqn-v0____1__4000000__0.00025__10000__0.99__1.0__500__128__1__0.05__0.5__100000__10__1747030630 recurring reward
+-  single reward -> less learning
+ALLES bis zum 13.05 hat nur bedingt gelernt
+- Grundlegend etwas falsch?
+  - Reward function eigentlich vielversprechend
+  - Observation_space eigentlich vielversprechend
+  - ABER: z.B. PPO verwendet NN und kein CNN -> besser für TabData und weniger für Bilder! -> Kapitel in MT
+- Deswegen: Experimente mit CNN statt NN

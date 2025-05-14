@@ -48,9 +48,9 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "FireboyAndWatergirl-sac-v0"
     """the id of the environment"""
-    total_timesteps: int = 200000
+    total_timesteps: int = 2000000
     """total timesteps of the experiments"""
-    buffer_size: int = int(10000)
+    buffer_size: int = int(256000)
     """the replay memory buffer size"""  # smaller than in original paper but evaluation is done only for 100k steps anyway
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -199,7 +199,7 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
 """
         )
     args = tyro.cli(Args)
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{args.total_timesteps}__{args.buffer_size}__{args.gamma}__{args.tau}__{args.target_network_frequency}__{args.batch_size}__{args.learning_starts}__{int(time.time())}"
     if args.track:
         import wandb
 

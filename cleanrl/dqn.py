@@ -20,7 +20,8 @@ import cleanrl.fireboy_and_watergirl_dqn
 
 @dataclass
 class Args:
-    exp_name: str = ''  # os.path.basename(__file__)[: -len(".py")]
+    # os.path.basename(__file__)[: -len(".py")]
+    exp_name: str = 'recurring reward'
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -224,7 +225,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                     1, data.actions).squeeze()
                 loss = F.mse_loss(td_target, old_val)
 
-                if global_step % 100 == 0:
+                if global_step % 1000 == 0:
                     writer.add_scalar("losses/td_loss", loss, global_step)
                     writer.add_scalar("losses/q_values",
                                       old_val.mean().item(), global_step)

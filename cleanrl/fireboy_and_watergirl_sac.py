@@ -68,6 +68,63 @@ class FireboyAndWatergirlEnv(gym.Env):
             "Watergirl Still",
         ]
 
+    def _load_level(self):
+        """
+        Load the level data from the file and dynamically set up the game components.
+        """
+        # Read the level data from the file
+        with open('./fireboy_and_watergirl/data/'+self.level+'.txt', 'r') as file:
+            level_data = [line.strip().split(',') for line in file.readlines()]
+
+        # Initialize game components
+        self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
+        self.gates: list[Gates] = []
+        self.doors: list[FireDoor | WaterDoor] = []
+        self.stars: list[Stars] = []
+        self.fire_boy: FireBoy = None
+        self.water_girl: WaterGirl = None
+
+        fire_boy_location = (200, 336)
+        self.fire_boy = FireBoy(fire_boy_location)
+        water_girl_location = (200, 336)
+        self.water_girl = WaterGirl(water_girl_location)
+
+        fire_door_location = (64, 48)
+        fire_door = FireDoor(fire_door_location)
+        water_door_location = (128, 48)
+        water_door = WaterDoor(water_door_location)
+        self.doors = [fire_door, water_door]
+
+        # Parse the level data to dynamically set up components
+        for y, row in enumerate(level_data):
+            for x, tile in enumerate(row):
+                # Assuming 16x16 tiles
+                if tile == 'f':  # Fireboy starting position
+                    self.fire_boy = FireBoy((x * 16, y * 16))
+                elif tile == 'w':  # Watergirl starting position
+                    self.water_girl = WaterGirl((x * 16, y * 16))
+                elif tile == 'A':  # Fire door
+                    self.doors.append(FireDoor((x * 16, y * 16)))
+                elif tile == 'B':  # Water door
+                    self.doors.append(WaterDoor((x * 16, y * 16)))
+                # elif tile == 'D':  # Gate
+                    # Add a generic gate (you can customize this further)
+                    # self.gates.append(Gates((x * 16, y * 16), []))
+                # elif tile == 'P':  # Plate A
+                    # Add a plate that controls a gate
+                    # self.gates.append(
+                    #     Plate((x * 16, y * 16), [(x * 16, y * 16)]))
+                elif tile == 'A':  # Plate B
+                    self.gates.append(
+                        FireDoor((x * 16, y * 16), [(x * 16, y * 16)]))
+                elif tile == 'B':  # Plate B
+                    self.gates.append(
+                        WaterDoor((x * 16, y * 16), [(x * 16, y * 16)]))
+                elif tile == 'a':  # Gate A
+                    self.stars.append(Stars([x * 16, y * 16], "fire"))
+                elif tile == 'b':  # Gate B
+                    self.stars.append(Stars([x * 16, y * 16], "water"))
+
     def _load_level1(self):
         """
         Load the level data and initialize game components.
@@ -177,11 +234,10 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.done = False  # self._check_done()
 
         self.steps += 1
+        if self.steps % 800 == 0:  # and self.game.index % 4 == 0:
+            self._get_state(draw=True)
         if self.steps >= self.max_steps:
             self.done = True
-
-        if (self.done):
-            self._get_state(draw=True)
 
         # Optionally, provide additional info
         info = {}
@@ -455,21 +511,36 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Example: +1 for reaching the door, -1 for falling into a trap
         if self.game.level_is_done(self.doors):
             return 1  # Both characters reached their doors
-        elif self.game.check_for_death(self.board, [self.fire_boy, self.water_girl]):
-            return -1  # One of the characters died
+        # elif self.game.check_for_death(self.board, [self.fire_boy, self.water_girl]):
+        #     return -1  # One of the characters died
+
+        # self.game.check_for_at_door(self.doors, self.fire_boy)
+        # self.game.check_for_at_door(self.doors, self.water_girl)
 
         fireboy_reward = 0
         watergirl_reward = 0
 
         for star in self.stars:
-            if star.is_collected:
-                if (star._player == "fire"):
-                    fireboy_reward += 1
+            if star.is_collected and not star.reward_given:
+                if star._player == "fire":
+                    fireboy_reward += 0.05
                 else:
-                    watergirl_reward += 1
+                    watergirl_reward += 0.05
+                # star.reward_given = True
 
-        # Combine rewards for both agents
-        return min(fireboy_reward, watergirl_reward) + 0.1 * max(fireboy_reward, watergirl_reward)
+        for door in self.doors:
+            if door.player_at_door and not door.reward_given:
+                print('PLAYER AT DOOR')
+                if (door._player == "fire"):
+                    fireboy_reward += 0.4
+                else:
+                    watergirl_reward += 0.4
+                # door.reward_given = True
+        # print(fireboy_reward, watergirl_reward)
+
+        # Reward for exploring new areas
+
+        return (0.9*min(fireboy_reward, watergirl_reward) + 0.1 * max(fireboy_reward, watergirl_reward))
 
     # def _compute_reward(self):
     #     reward = 0

@@ -4,6 +4,7 @@ from fireboy_and_watergirl.rect import Rect
 class Doors:
     def __init__(self):
         # Set doors' initial height and state
+        self._player = None
         self.player_at_door = False
         self._height_raised = 0
         self._door_open = False
@@ -12,6 +13,7 @@ class Doors:
         self.position = (0, 0)
         self.door_width = 16
         self.door_height = 32
+        self.reward_given = False
         self._rect = None
         self.make_rects()
 
@@ -83,9 +85,7 @@ class FireDoor(Doors):
         # Since the frame is larger than the door, it has to be offset
         self.frame_location = (
             position[0] - CHUNK_SIZE, position[1] - 2 * CHUNK_SIZE)
-        # Set door dimensions
-        self.door_width = 16
-        self.door_height = 32
+        self._player = "fire"
         super().__init__()
 
 
@@ -99,7 +99,5 @@ class WaterDoor(Doors):
         # Since the frame is larger than the door, it has to be offset
         self.frame_location = (
             position[0] - CHUNK_SIZE, position[1] - 2 * CHUNK_SIZE)
-        # Set door dimensions
-        self.door_width = 16
-        self.door_height = 32
+        self._player = "water"
         super().__init__()
