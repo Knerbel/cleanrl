@@ -22,7 +22,8 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 )
 
 # Import your Fireboy and Watergirl environment to ensure it's registered
-import cleanrl.fireboy_and_watergirl_ppo
+# import cleanrl.fireboy_and_watergirl_ppo
+import cleanrl.fireboy_and_watergirl_ppo_v3
 
 
 @dataclass
@@ -45,15 +46,15 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v0'  # "BreakoutNoFrameskip-v4"
+    env_id: str = 'FireboyAndWatergirl-ppo-v3'  # "BreakoutNoFrameskip-v4"
     """the id of the environment"""
     total_timesteps: int = 10000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 4
+    num_envs: int = 8
     """the number of parallel game environments"""
-    num_steps: int = 400 * 20
+    num_steps: int = 400
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""

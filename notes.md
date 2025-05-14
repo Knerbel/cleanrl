@@ -34,3 +34,11 @@ ALLES bis zum 13.05 hat nur bedingt gelernt
   - Observation_space eigentlich vielversprechend
   - ABER: z.B. PPO verwendet NN und kein CNN -> besser für TabData und weniger für Bilder! -> Kapitel in MT
 - Deswegen: Experimente mit CNN statt NN
+  - erster Run: FireboyAndWatergirl-ppo-v0__ppo_atari__1__1747201908
+    - kein wirkliches lernen, recurring, 90/10
+  - zweiter RUn: FireboyAndWatergirl-ppo-v0__ppo_atari__1__1747202501
+    -  kein wirkliches lernen, single, 90/10
+ - Testrun mit "BreakoutNoFrameskip-v4" funktioniert. Aber man muss lange warten BreakoutNoFrameskip-v4__ppo_atari__1__1747208554
+   - Im .md video werden die Wrapper erklärt, das muss mit in die MT
+- SAC-ATARI erfolgreicher Run: FireboyAndWatergirl-ppo-v3__ppo_atari__1__1747210222
+  - ABER mit "nur" 400 steps, und einfachem neuen Level1b und ohne Doors

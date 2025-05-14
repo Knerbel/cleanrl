@@ -41,7 +41,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self._load_level()
 
         self.steps = 0
-        self.max_steps = 400 * 20
+        self.max_steps = 400
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
         self.level_width = 34 - 2   # Assuming 1-tile border on left and right
@@ -50,17 +50,25 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=0,
             high=255,
-            shape=(self.level_height * self.level_width *
-                   self.num_channels * 3,),
+            shape=(self.level_height, self.level_width,
+                   self.num_channels,),
             dtype=np.uint8
         )
 
-        # Initialize a queue to store the last 3 observations
-        self.observation_history = [np.zeros(
-            (self.level_height * self.level_width * self.num_channels,), dtype=np.uint8) for _ in range(3)]
-
         self.explored_tiles_fb = set()
         self.explored_tiles_wg = set()
+
+    def get_action_meanings(self):
+        return [
+            "NOOP",
+            "Fireboy Right",
+            "Fireboy Up",
+            "Fireboy Still",
+            "Watergirl Left",
+            "Watergirl Right",
+            "Watergirl Up",
+            "Watergirl Still",
+        ]
 
     def _load_level(self):
         """
@@ -132,10 +140,6 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.explored_tiles_wg = set()
         self.done = False
         self.steps = 0
-
-        # Reset the observation history
-        self.observation_history = [np.zeros(
-            (self.level_height * self.level_width * self.num_channels,), dtype=np.uint8) for _ in range(3)]
 
         return self.state, {}
 
@@ -301,35 +305,20 @@ class FireboyAndWatergirlEnv(gym.Env):
                     print(
                         f"watergirl position out of bounds: ({fb_x}, {fb_y})")
 
-        # Flatten the RGB image
-        flattened_image = rgb_image.flatten()
         # Update the observation history only if the state has changed
-        if not np.array_equal(flattened_image, self.observation_history[-1]):
-            self.observation_history.pop(0)  # Remove the oldest observation
-            # Add the current observation
-            self.observation_history.append(flattened_image)
 
-        # Stack the last 3 observations
-        stacked_observation = np.concatenate(self.observation_history, axis=0)
         # Save image if requested
         if draw:
-            # Reshape each frame back to its original shape
-            frames = [obs.reshape((inner_height, inner_width, 3))
-                      for obs in self.observation_history]
-
-            # Concatenate frames side by side
-            side_by_side_image = np.concatenate(frames, axis=1)
-
             # Plot and save the image
             plt.figure(figsize=(15, 5))
-            plt.imshow(side_by_side_image)
+            plt.imshow(rgb_image)
             plt.axis('off')
             plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
             plt.savefig(f"stacked_observation.png",
                         bbox_inches='tight', pad_inches=0)
             plt.close()
 
-        return stacked_observation
+        return rgb_image
 
     def _apply_action(self, action):
         """
