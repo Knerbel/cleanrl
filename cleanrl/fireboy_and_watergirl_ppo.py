@@ -52,12 +52,24 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=0,
             high=255,
-            shape=(self.level_height * self.level_width * self.num_channels,),
+            shape=(self.level_height, self.level_width, self.num_channels,),
             dtype=np.uint8
         )
 
         self.explored_tiles_fb = set()
         self.explored_tiles_wg = set()
+
+    def get_action_meanings(self):
+        return [
+            "NOOP",
+            "Fireboy Right",
+            "Fireboy Up",
+            "Fireboy Still",
+            "Watergirl Left",
+            "Watergirl Right",
+            "Watergirl Up",
+            "Watergirl Still",
+        ]
 
     def _load_level(self):
         """
@@ -148,7 +160,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.done = False  # self._check_done()
 
         self.steps += 1
-        if self.steps % 8000 == 0 and self.game.index % 4 == 0:
+        if self.steps % 400*4 == 0 and self.game.index % 4 == 0:
             self._get_state(draw=True)
         if self.steps >= self.max_steps:
             self.done = True
@@ -300,7 +312,6 @@ class FireboyAndWatergirlEnv(gym.Env):
                         f"watergirl position out of bounds: ({fb_x}, {fb_y})")
 
         # Flatten the RGB image
-        flattened_image = rgb_image.flatten()
 
         # Save image if requested
         if draw:
@@ -310,8 +321,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
             plt.savefig(f"observation.png", bbox_inches='tight', pad_inches=0)
             plt.close()
-
-        return flattened_image
+        return rgb_image
 
     def _apply_action(self, action):
         """
@@ -386,19 +396,22 @@ class FireboyAndWatergirlEnv(gym.Env):
         watergirl_reward = 0
 
         for star in self.stars:
-            if star.is_collected:
+            if star.is_collected and not star.reward_given:
                 if (star._player == "fire"):
                     fireboy_reward += 10
                 else:
                     watergirl_reward += 10
+                star.reward_given = True
 
-        # for door in self.doors:
-        #     if door.player_at_door:
-        #         print('PLAYER AT DOOR')
-        #         if (door._player == "fire"):
-        #             fireboy_reward += 100
-        #         else:
-        #             watergirl_reward += 100
+        for door in self.doors:
+            if door.player_at_door and not door.reward_given:
+                print('PLAYER AT DOOR')
+                if (door._player == "fire"):
+                    fireboy_reward += 100
+                else:
+                    watergirl_reward += 100
+                door.reward_given = True
+
         # print(fireboy_reward, watergirl_reward)
 
         # Reward for exploring new areas
