@@ -27,7 +27,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         #          4 = Watergirl Left, 5 = Watergirl Right, 6 = Watergirl Up, 7 = Watergirl Still
         self.action_space = spaces.Discrete(8)
         # Initialize game components
-        self.level = "level1b"
+        self.level = "level1c"
         self.game = Game()  # Instantiate the Game class
         self.board = None
         self.fire_boy = None
@@ -159,7 +159,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.done = False  # self._check_done()
 
         self.steps += 1
-        if self.steps % 800 == 0 and self.game.index % 4 == 0:
+        if self.steps == self.max_steps and self.game.index % 4 == 0:
             self._get_state(draw=True)
         if self.steps >= self.max_steps:
             self.done = True
@@ -314,7 +314,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             plt.imshow(rgb_image)
             plt.axis('off')
             plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-            plt.savefig(f"stacked_observation.png",
+            plt.savefig(f"observation.png",
                         bbox_inches='tight', pad_inches=0)
             plt.close()
 
