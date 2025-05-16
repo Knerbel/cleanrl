@@ -26,11 +26,12 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 # import cleanrl.fireboy_and_watergirl_ppo
 import cleanrl.fireboy_and_watergirl_ppo_v3_recR
 import cleanrl.fireboy_and_watergirl_ppo_v3_singleR
+import cleanrl.fireboy_and_watergirl_ppo_v4
 
 
 @dataclass
 class Args:
-    exp_name: str = "as high as possible"
+    exp_name: str = "snake learning, both agents"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -48,15 +49,15 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v3-singleR'  # "BreakoutNoFrameskip-v4"
+    env_id: str = 'FireboyAndWatergirl-ppo-v4'  # "BreakoutNoFrameskip-v4"
     """the id of the environment"""
-    total_timesteps: int = 10000000
+    total_timesteps: int = 100_000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
     num_envs: int = 8
     """the number of parallel game environments"""
-    num_steps: int = 400
+    num_steps: int = 128
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
