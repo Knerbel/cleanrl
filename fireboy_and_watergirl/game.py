@@ -32,7 +32,8 @@ class Game:
     def increment_game_count():
         if not hasattr(Game, "_game_count"):
             Game._game_count = 0
-        Game._game_count += 1
+        else:
+            Game._game_count += 1
         return Game._game_count
 
     def draw_level_screen(self, level_select):

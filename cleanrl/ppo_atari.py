@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 
 import gymnasium as gym
+from matplotlib import pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -23,12 +24,13 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 
 # Import your Fireboy and Watergirl environment to ensure it's registered
 # import cleanrl.fireboy_and_watergirl_ppo
-import cleanrl.fireboy_and_watergirl_ppo_v3
+import cleanrl.fireboy_and_watergirl_ppo_v3_recR
+import cleanrl.fireboy_and_watergirl_ppo_v3_singleR
 
 
 @dataclass
 class Args:
-    exp_name: str = os.path.basename(__file__)[: -len(".py")]
+    exp_name: str = "as high as possible"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -46,7 +48,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v3'  # "BreakoutNoFrameskip-v4"
+    env_id: str = 'FireboyAndWatergirl-ppo-v3-singleR'  # "BreakoutNoFrameskip-v4"
     """the id of the environment"""
     total_timesteps: int = 10000000
     """total timesteps of the experiments"""
@@ -153,7 +155,9 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    # run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.env_id}_{args.exp_name}_{args.seed}_{args.total_timesteps}_{args.learning_rate}_{args.num_envs}_{args.num_steps}_{args.anneal_lr}_{args.gamma}_{args.gae_lambda}_{args.num_minibatches}_{args.update_epochs}_{args.norm_adv}_{args.clip_coef}_{args.clip_vloss}_{args.ent_coef}_{args.vf_coef}_{args.max_grad_norm}_{args.target_kl}_{int(time.time())}"
+
     if args.track:
         import wandb
 
@@ -219,6 +223,29 @@ if __name__ == "__main__":
 
         for step in range(0, args.num_steps):
             global_step += args.num_envs
+
+            # Inside the training loop, before calling the agent
+            # if (global_step//args.num_envs) % 100 == 0:  # Save every 1000 steps
+            #     print('Foobar')
+            #     # Convert the observation tensor to a NumPy array
+            #     # Take the first environment's observation
+            #     obs_image = next_obs[0].cpu().numpy()
+
+            #     # Reshape and normalize the observation for visualization
+            #     # Convert from (C, H, W) to (H, W, C)
+            #     obs_image = obs_image.transpose(1, 2, 0)
+            #     # Normalize to [0, 1] for visualization
+            #     obs_image = obs_image / 255.0
+
+            #     # Plot and save the image
+            #     plt.figure(figsize=(6, 6))
+            #     plt.imshow(obs_image, cmap="gray")
+            #     plt.axis("off")
+            #     plt.title(f"Input to Agent at Step {global_step}")
+            #     plt.savefig(
+            #         f"agent_input_step_{global_step}.png", bbox_inches="tight", pad_inches=0)
+            #     plt.close()
+
             obs[step] = next_obs
             dones[step] = next_done
 

@@ -40,5 +40,11 @@ ALLES bis zum 13.05 hat nur bedingt gelernt
     -  kein wirkliches lernen, single, 90/10
  - Testrun mit "BreakoutNoFrameskip-v4" funktioniert. Aber man muss lange warten BreakoutNoFrameskip-v4__ppo_atari__1__1747208554
    - Im .md video werden die Wrapper erklärt, das muss mit in die MT
-- SAC-ATARI erfolgreicher Run: FireboyAndWatergirl-ppo-v3__ppo_atari__1__1747210222
+- PPO-ATARI erfolgreicher Run: FireboyAndWatergirl-ppo-v3__ppo_atari__1__1747210222
   - ABER mit "nur" 400 steps, und einfachem neuen Level1b und ohne Doors
+- PPO-Atari erfolgreicher Run FireboyAndWatergirl-ppo-v3__ppo_atari__1__1747217226
+    -  und einfachem neuen Level1c u
+NACHDEM ALLES NICHT WIRKLICH GEKLAPPT HAT, neuer Versuch:
+- inspiriert von Snake
+  - low total_timesteps
+  - high num_envs
