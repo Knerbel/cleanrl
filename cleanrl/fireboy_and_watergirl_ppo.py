@@ -43,7 +43,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self._load_level()
 
         self.steps = 0
-        self.max_steps = 400 * 20
+        self.max_steps = 400
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
         self.level_width = 34 - 2   # Assuming 1-tile border on left and right

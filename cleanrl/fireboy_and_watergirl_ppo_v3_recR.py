@@ -27,7 +27,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         #          4 = Watergirl Left, 5 = Watergirl Right, 6 = Watergirl Up, 7 = Watergirl Still
         self.action_space = spaces.Discrete(8)
         # Initialize game components
-        self.level = "level1c"
+        self.level = "level1d"
         self.game = Game()  # Instantiate the Game class
         self.board = None
         self.fire_boy = None
@@ -41,7 +41,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         self._load_level()
 
         self.steps = 0
-        self.max_steps = 400
+        self.max_steps = 400 * 4
+        self.envs = 8
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
         self.level_width = 34 - 2   # Assuming 1-tile border on left and right
@@ -159,7 +160,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.done = False  # self._check_done()
 
         self.steps += 1
-        if self.steps == self.max_steps and self.game.index % 4 == 0:
+        if self.steps == self.max_steps and self.game.index % self.envs == 0:
             self._get_state(draw=True)
         if self.steps >= self.max_steps:
             self.done = True
@@ -427,7 +428,7 @@ class FireboyAndWatergirlEnv(gym.Env):
 
 # Register the environment
 register(
-    id="FireboyAndWatergirl-ppo-v3",  # Unique ID for the environment
+    id="FireboyAndWatergirl-ppo-v3-recR",  # Unique ID for the environment
     # Path to the environment class
-    entry_point="cleanrl.fireboy_and_watergirl_ppo_v3:FireboyAndWatergirlEnv",
+    entry_point="cleanrl.fireboy_and_watergirl_ppo_v3_recR:FireboyAndWatergirlEnv",
 )
