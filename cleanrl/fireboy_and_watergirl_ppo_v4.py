@@ -21,14 +21,19 @@ class FireboyAndWatergirlEnv(gym.Env):
     def __init__(self):
         super(FireboyAndWatergirlEnv, self).__init__()
 
-        # Define the action space (e.g., discrete actions for movement)
-        # Actions: 0 = Fireboy Left, 1 = Fireboy Right, 2 = Fireboy Up, 3 = Fireboy Still,
-        #          4 = Watergirl Left, 5 = Watergirl Right, 6 = Watergirl Up, 7 = Watergirl Still
-        # self.action_space = spaces.Discrete(8)
         # 4 actions for each character
         self.action_space = spaces.MultiDiscrete([4, 4])
         # Initialize game components
-        self.level = "level1_empty"
+        self.level = "level1_empty1"
+        # Add these lines after self.level initialization
+        self.available_levels = ["level1_empty1",
+                                 "level1_empty2", "level1_empty3"]  # Add your level names
+        self.current_level_idx = 0
+        self.success_threshold = 0.6  # Success rate needed to progress (80%)
+        self.episode_window = 32  # Number of episodes to calculate success rate
+        self.episode_results = []  # Track success/failure of episodes
+        self.level = self.available_levels[self.current_level_idx]
+
         self.game = Game()  # Instantiate the Game class
         self.board = None
         self.fire_boy = None
@@ -56,10 +61,19 @@ class FireboyAndWatergirlEnv(gym.Env):
             dtype=np.uint8
         )
 
-        self.explored_tiles_fb = set()
-        self.explored_tiles_wg = set()
-        self.r = 0
-        self.l = 0
+    def _should_progress_level(self):
+        """Check if we should move to the next level based on recent performance"""
+
+        # Calculate success rate over last episode_window episodes
+        recent_results = self.episode_results[-self.episode_window:]
+        success_rate = sum(recent_results) / len(recent_results)
+        print(
+            f"Success rate: {success_rate:.2f} over last {self.episode_window} episodes")
+
+        if len(self.episode_results) < self.episode_window:
+            return False
+
+        return success_rate >= self.success_threshold
 
     def get_action_meanings(self):
         return [
@@ -106,10 +120,11 @@ class FireboyAndWatergirlEnv(gym.Env):
         Reset the environment to its initial state and return the initial observation.
         """
         super().reset(seed=seed)
+        # Update current level
+        self.level = self.available_levels[self.current_level_idx]
+
         self._load_level()
         self.state = self._get_state()
-        self.explored_tiles_fb = set()
-        self.explored_tiles_wg = set()
         self.done = False
         self.steps = 0
 
@@ -140,8 +155,19 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Check if the game is done
         self.done = self._check_done()
         if self.done:
-            print('DONE!')
+            # print('DONE!')
             self.draw_observation(self.state)
+            # Track if episode was successful (all stars collected)
+
+            # Check if we should progress to next level
+            if self._should_progress_level():
+                if self.current_level_idx < len(self.available_levels) - 1:
+                    self.current_level_idx += 1
+                else:
+                    self.current_level_idx = 0  # Loop back to the first level
+                self.level = self.available_levels[self.current_level_idx]
+                self.episode_results = []  # Reset progress tracking for new level
+                print(f"Progressing to level: {self.level}")
 
         self.steps += 1
         if self.steps == self.max_steps and self.game.index % self.envs == 0:
@@ -155,6 +181,9 @@ class FireboyAndWatergirlEnv(gym.Env):
             # Draw the observation of the best-performing environment
             if self.game.index == best_env_index:
                 self.draw_observation(self.state)
+
+            success = self._check_done() and self.steps < self.max_steps
+            self.episode_results.append(1 if success else 0)
 
         # Optionally, provide additional info
         info = {}
@@ -334,12 +363,10 @@ class FireboyAndWatergirlEnv(gym.Env):
                 self.fire_boy.moving_right = False
                 self.fire_boy.jumping = False
             elif fireboy_action == 1:
-                self.l += 1
                 self.fire_boy.moving_left = True
                 self.fire_boy.moving_right = False
                 self.fire_boy.jumping = False
             elif fireboy_action == 2:
-                self.r += 1
                 self.fire_boy.moving_left = False
                 self.fire_boy.moving_right = True
                 self.fire_boy.jumping = False
