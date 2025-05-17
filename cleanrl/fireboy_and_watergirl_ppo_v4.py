@@ -24,7 +24,9 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Define the action space (e.g., discrete actions for movement)
         # Actions: 0 = Fireboy Left, 1 = Fireboy Right, 2 = Fireboy Up, 3 = Fireboy Still,
         #          4 = Watergirl Left, 5 = Watergirl Right, 6 = Watergirl Up, 7 = Watergirl Still
-        self.action_space = spaces.Discrete(8)
+        # self.action_space = spaces.Discrete(8)
+        # 4 actions for each character
+        self.action_space = spaces.MultiDiscrete([4, 4])
         # Initialize game components
         self.level = "level1_empty"
         self.game = Game()  # Instantiate the Game class
@@ -62,13 +64,9 @@ class FireboyAndWatergirlEnv(gym.Env):
     def get_action_meanings(self):
         return [
             "NOOP",
-            "Fireboy Left",
-            "Fireboy Right",
-            "Fireboy Up",
-            "Watergirl Left",
-            "Watergirl Right",
-            "Watergirl Up",
-            "Watergirl Still",
+            "Left",
+            "Right",
+            "Up",
         ]
 
     def _load_level(self):
@@ -315,53 +313,57 @@ class FireboyAndWatergirlEnv(gym.Env):
         Update the game state based on the discrete action.
         """
         # Decode the single discrete action into Fireboy and Watergirl actions
-        fireboy_action = 3
-        watergirl_action = 3
 
-        # Map the action to Fireboy and Watergirl actions
-        if action <= 3:
-            fireboy_action = action
-        elif action >= 4:
-            watergirl_action = action - 4
+        # Check if action is an array-like (for MultiDiscrete) or a single int
+        if isinstance(action, (list, tuple, np.ndarray)) and len(action) == 2:
+            # print(action)
+            fireboy_action = 3
+            watergirl_action = 3
 
-        # Map Fireboy's action
+            # Map the action to Fireboy and Watergirl actions
+            # if action <= 3:
+            fireboy_action = action[0]
+            # elif action >= 4:
+            watergirl_action = action[1]
 
-        # print(fireboy_action)
-        if fireboy_action == 0:
-            self.fire_boy.moving_left = False
-            self.fire_boy.moving_right = False
-            self.fire_boy.jumping = False
-        elif fireboy_action == 1:
-            self.l += 1
-            self.fire_boy.moving_left = True
-            self.fire_boy.moving_right = False
-            self.fire_boy.jumping = False
-        elif fireboy_action == 2:
-            self.r += 1
-            self.fire_boy.moving_left = False
-            self.fire_boy.moving_right = True
-            self.fire_boy.jumping = False
-        elif fireboy_action == 3:
-            self.fire_boy.moving_left = False
-            self.fire_boy.moving_right = False
-            self.fire_boy.jumping = True
+            # Map Fireboy's action
 
-        if watergirl_action == 0:
-            self.water_girl.moving_left = True
-            self.water_girl.moving_right = False
-            self.water_girl.jumping = False
-        elif watergirl_action == 1:
-            self.water_girl.moving_left = False
-            self.water_girl.moving_right = True
-            self.water_girl.jumping = False
-        elif watergirl_action == 2:
-            self.water_girl.moving_left = False
-            self.water_girl.moving_right = False
-            self.water_girl.jumping = True
-        elif watergirl_action == 3:
-            self.water_girl.moving_left = False
-            self.water_girl.moving_right = False
-            self.water_girl.jumping = False
+            # print(fireboy_action)
+            if fireboy_action == 0:
+                self.fire_boy.moving_left = False
+                self.fire_boy.moving_right = False
+                self.fire_boy.jumping = False
+            elif fireboy_action == 1:
+                self.l += 1
+                self.fire_boy.moving_left = True
+                self.fire_boy.moving_right = False
+                self.fire_boy.jumping = False
+            elif fireboy_action == 2:
+                self.r += 1
+                self.fire_boy.moving_left = False
+                self.fire_boy.moving_right = True
+                self.fire_boy.jumping = False
+            elif fireboy_action == 3:
+                self.fire_boy.moving_left = False
+                self.fire_boy.moving_right = False
+                self.fire_boy.jumping = True
+
+            if watergirl_action == 0:
+                self.water_girl.moving_left = False
+                self.water_girl.moving_right = False
+                self.water_girl.jumping = False
+            elif watergirl_action == 1:
+                self.water_girl.moving_left = True
+                self.water_girl.moving_right = False
+                self.water_girl.jumping = False
+            elif watergirl_action == 2:
+                self.water_girl.moving_left = False
+                self.water_girl.moving_right = True
+                self.water_girl.jumping = False
+            elif watergirl_action == 3:
+                self.water_girl.moving_left = False
+                self.water_girl.moving_right = False
+                self.water_girl.jumping = True
 
         self.game.move_player(self.board, self.gates, [
                               self.fire_boy, self.water_girl])

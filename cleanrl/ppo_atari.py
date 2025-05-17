@@ -51,9 +51,9 @@ class Args:
     # Algorithm specific arguments
     env_id: str = 'FireboyAndWatergirl-ppo-v4'  # "BreakoutNoFrameskip-v4"
     """the id of the environment"""
-    total_timesteps: int = 100_000
+    total_timesteps: int = 1000_000
     """total timesteps of the experiments"""
-    learning_rate: float = 2.5e-4
+    learning_rate: float = 2 * 2.5e-4
     """the learning rate of the optimizer"""
     num_envs: int = 8
     """the number of parallel game environments"""
@@ -135,8 +135,8 @@ class Agent(nn.Module):
             layer_init(nn.Linear(64 * 7 * 7, 512)),
             nn.ReLU(),
         )
-        self.actor = layer_init(
-            nn.Linear(512, envs.single_action_space.n), std=0.01)
+        # For MultiDiscrete([4, 4]), output 8 logits (4 per action)
+        self.actor = layer_init(nn.Linear(512, 8), std=0.01)
         self.critic = layer_init(nn.Linear(512, 1), std=1)
 
     def get_value(self, x):
@@ -145,10 +145,19 @@ class Agent(nn.Module):
     def get_action_and_value(self, x, action=None):
         hidden = self.network(x / 255.0)
         logits = self.actor(hidden)
-        probs = Categorical(logits=logits)
+        logits1, logits2 = logits.split(4, dim=-1)
+        dist1 = Categorical(logits=logits1)
+        dist2 = Categorical(logits=logits2)
         if action is None:
-            action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)
+            action1 = dist1.sample()
+            action2 = dist2.sample()
+            action = torch.stack([action1, action2], dim=-1)
+        else:
+            action1, action2 = action[..., 0], action[..., 1]
+        logprob = dist1.log_prob(
+            action[..., 0]) + dist2.log_prob(action[..., 1])
+        entropy = dist1.entropy() + dist2.entropy()
+        return action, logprob, entropy, self.critic(hidden)
 
 
 if __name__ == "__main__":
@@ -156,6 +165,7 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
+
     # run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     run_name = f"{args.env_id}_{args.exp_name}_{args.seed}_{args.total_timesteps}_{args.learning_rate}_{args.num_envs}_{args.num_steps}_{args.anneal_lr}_{args.gamma}_{args.gae_lambda}_{args.num_minibatches}_{args.update_epochs}_{args.norm_adv}_{args.clip_coef}_{args.clip_vloss}_{args.ent_coef}_{args.vf_coef}_{args.max_grad_norm}_{args.target_kl}_{int(time.time())}"
 
@@ -192,8 +202,8 @@ if __name__ == "__main__":
         [make_env(args.env_id, i, args.capture_video, run_name)
          for i in range(args.num_envs)],
     )
-    assert isinstance(envs.single_action_space,
-                      gym.spaces.Discrete), "only discrete action space is supported"
+    # assert isinstance(envs.single_action_space,
+    #                   gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -201,8 +211,9 @@ if __name__ == "__main__":
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) +
                       envs.single_observation_space.shape).to(device)
-    actions = torch.zeros((args.num_steps, args.num_envs) +
-                          envs.single_action_space.shape).to(device)
+    # actions = torch.zeros((args.num_steps, args.num_envs) +
+    #                       envs.single_action_space.shape).to(device)
+    actions = torch.zeros((args.num_steps, args.num_envs, 2)).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -297,13 +308,13 @@ if __name__ == "__main__":
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
         b_logprobs = logprobs.reshape(-1)
-        b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+        b_actions = actions.reshape((-1, 2))  # Changed this line
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
 
         # Optimizing the policy and value network
-        b_inds = np.arange(args.batch_size)
+        b_inds = np.arange(b_obs.shape[0])  # Changed this line
         clipfracs = []
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
@@ -312,7 +323,8 @@ if __name__ == "__main__":
                 mb_inds = b_inds[start:end]
 
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(
-                    b_obs[mb_inds], b_actions.long()[mb_inds])
+                    b_obs[mb_inds], b_actions[mb_inds]  # Changed this line
+                )
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
