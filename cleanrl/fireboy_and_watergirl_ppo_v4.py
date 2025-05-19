@@ -1,3 +1,4 @@
+import random
 import gymnasium as gym
 from gymnasium import spaces
 from matplotlib import pyplot as plt
@@ -24,15 +25,11 @@ class FireboyAndWatergirlEnv(gym.Env):
         # 4 actions for each character
         self.action_space = spaces.MultiDiscrete([4, 4])
         # Initialize game components
-        self.level = "level1_empty1"
-        # Add these lines after self.level initialization
         self.available_levels = ["level1_empty1",
                                  "level1_empty2", "level1_empty3"]  # Add your level names
-        self.current_level_idx = 0
-        self.success_threshold = 0.6  # Success rate needed to progress (80%)
+        self.level = random.choice(self.available_levels)
         self.episode_window = 32  # Number of episodes to calculate success rate
         self.episode_results = []  # Track success/failure of episodes
-        self.level = self.available_levels[self.current_level_idx]
 
         self.game = Game()  # Instantiate the Game class
         self.board = None
@@ -61,20 +58,6 @@ class FireboyAndWatergirlEnv(gym.Env):
             dtype=np.uint8
         )
 
-    def _should_progress_level(self):
-        """Check if we should move to the next level based on recent performance"""
-
-        # Calculate success rate over last episode_window episodes
-        recent_results = self.episode_results[-self.episode_window:]
-        success_rate = sum(recent_results) / len(recent_results)
-        print(
-            f"Success rate: {success_rate:.2f} over last {self.episode_window} episodes")
-
-        if len(self.episode_results) < self.episode_window:
-            return False
-
-        return success_rate >= self.success_threshold
-
     def get_action_meanings(self):
         return [
             "NOOP",
@@ -87,6 +70,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         """
         Load the level data from the file and dynamically set up the game components.
         """
+
+        self.level = random.choice(self.available_levels)
         # Read the level data from the file
         with open('./fireboy_and_watergirl/data/'+self.level+'.txt', 'r') as file:
             level_data = [line.strip().split(',') for line in file.readlines()]
@@ -120,8 +105,6 @@ class FireboyAndWatergirlEnv(gym.Env):
         Reset the environment to its initial state and return the initial observation.
         """
         super().reset(seed=seed)
-        # Update current level
-        self.level = self.available_levels[self.current_level_idx]
 
         self._load_level()
         self.state = self._get_state()
@@ -158,16 +141,6 @@ class FireboyAndWatergirlEnv(gym.Env):
             # print('DONE!')
             self.draw_observation(self.state)
             # Track if episode was successful (all stars collected)
-
-            # Check if we should progress to next level
-            if self._should_progress_level():
-                if self.current_level_idx < len(self.available_levels) - 1:
-                    self.current_level_idx += 1
-                else:
-                    self.current_level_idx = 0  # Loop back to the first level
-                self.level = self.available_levels[self.current_level_idx]
-                self.episode_results = []  # Reset progress tracking for new level
-                print(f"Progressing to level: {self.level}")
 
         self.steps += 1
         if self.steps == self.max_steps and self.game.index % self.envs == 0:
@@ -400,7 +373,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.stars, [self.fire_boy, self.water_girl])
 
     def _compute_reward(self):
-        reward = -0.001  # Time penalty
+        reward = 0  # -0.001  # Time penalty
 
         # Vectorized reward for stars
         stars = np.array(self.stars)
@@ -408,11 +381,11 @@ class FireboyAndWatergirlEnv(gym.Env):
         reward_given = np.array([star.reward_given for star in stars])
         for i, star in enumerate(stars):
             if is_collected[i] and not reward_given[i]:
-                reward += 1
+                reward += 10
                 star.reward_given = True
 
         if self._check_done():
-            reward *= 2
+            reward *= 10
 
         return reward
 

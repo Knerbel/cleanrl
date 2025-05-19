@@ -31,7 +31,7 @@ import cleanrl.fireboy_and_watergirl_ppo_v4
 
 @dataclass
 class Args:
-    exp_name: str = "snake learning, both agents"
+    exp_name: str = "snake learning parallel"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
