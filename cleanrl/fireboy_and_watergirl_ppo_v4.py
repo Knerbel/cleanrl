@@ -27,8 +27,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Initialize game components
         self.available_levels = ["level1_empty1",
                                  "level1_empty2", "level1_empty3"]  # Add your level names
-        self.level = random.choice(self.available_levels)
-        self.episode_window = 32  # Number of episodes to calculate success rate
+        self.level = 'level1_empty'
+        # random.choice(self.available_levels)
         self.episode_results = []  # Track success/failure of episodes
 
         self.game = Game()  # Instantiate the Game class
@@ -70,9 +70,6 @@ class FireboyAndWatergirlEnv(gym.Env):
         """
         Load the level data from the file and dynamically set up the game components.
         """
-
-        self.level = random.choice(self.available_levels)
-        # Read the level data from the file
         with open('./fireboy_and_watergirl/data/'+self.level+'.txt', 'r') as file:
             level_data = [line.strip().split(',') for line in file.readlines()]
 
@@ -84,6 +81,74 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.fire_boy: FireBoy = None
         self.water_girl: WaterGirl = None
 
+        # First pass: Find all valid floor positions
+        valid_positions = []
+        # for y in range((len(level_data)//2) - 2, -1, -1):
+        y = 21
+        for x in range(len(level_data[0])):
+            if (level_data[y][x] == ' ' and
+                y < len(level_data) - 1
+                # and
+                    # level_data[y + 1][x] in ['S', 'G']
+                ):
+                valid_positions.append((x, y))
+
+        if not valid_positions:
+            raise ValueError("No valid floor positions found in the level!")
+
+        def manhattan_distance(pos1, pos2):
+            return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+
+        MIN_DISTANCE = 5  # Minimum Manhattan distance between entities
+
+        # Place characters and stars with minimum distance
+        remaining_positions = valid_positions.copy()
+        selected_positions = []
+
+        # Place Fireboy
+        if remaining_positions:
+            fb_pos = random.choice(remaining_positions)
+            selected_positions.append(fb_pos)
+            # Remove nearby positions
+            remaining_positions = [pos for pos in remaining_positions
+                                   if manhattan_distance(pos, fb_pos) >= MIN_DISTANCE]
+
+        # Place Watergirl
+        if remaining_positions:
+            wg_pos = random.choice(remaining_positions)
+            selected_positions.append(wg_pos)
+            # Remove nearby positions
+            remaining_positions = [pos for pos in remaining_positions
+                                   if manhattan_distance(pos, wg_pos) >= MIN_DISTANCE]
+
+        # Place Fire Star
+        if remaining_positions:
+            star1_pos = random.choice(remaining_positions)
+            selected_positions.append(star1_pos)
+            # Remove nearby positions
+            remaining_positions = [pos for pos in remaining_positions
+                                   if manhattan_distance(pos, star1_pos) >= MIN_DISTANCE]
+
+        # Place Water Star
+        if remaining_positions:
+            star2_pos = random.choice(remaining_positions)
+            selected_positions.append(star2_pos)
+
+        # Create entities only if we have enough positions
+        if len(selected_positions) >= 2:
+            self.fire_boy = FireBoy(
+                (selected_positions[0][0] * 16, selected_positions[0][1] * 16))
+            self.water_girl = WaterGirl(
+                (selected_positions[1][0] * 16, selected_positions[1][1] * 16))
+
+            if len(selected_positions) > 2:
+                self.stars.append(
+                    Stars([selected_positions[2][0] * 16, selected_positions[2][1] * 16], "fire"))
+            if len(selected_positions) > 3:
+                self.stars.append(
+                    Stars([selected_positions[3][0] * 16, selected_positions[3][1] * 16], "water"))
+
+        # Keep doors and gates from the original level data
         for y, row in enumerate(level_data):
             for x, tile in enumerate(row):
                 pos = (x * 16, y * 16)
@@ -91,14 +156,6 @@ class FireboyAndWatergirlEnv(gym.Env):
                     self.doors.append(FireDoor(pos))
                 elif tile == 'B':
                     self.doors.append(WaterDoor(pos))
-                elif tile == 'f':
-                    self.fire_boy = FireBoy(pos)
-                elif tile == 'w':
-                    self.water_girl = WaterGirl(pos)
-                elif tile == 'a':
-                    self.stars.append(Stars([*pos], "fire"))
-                elif tile == 'b':
-                    self.stars.append(Stars([*pos], "water"))
 
     def reset(self, seed=None, options=None):
         """
