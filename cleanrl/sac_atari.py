@@ -24,11 +24,12 @@ from torch.utils.tensorboard import SummaryWriter
 
 # Import your Fireboy and Watergirl environment to ensure it's registered
 import cleanrl.fireboy_and_watergirl_sac
+import cleanrl.fireboy_and_watergirl_ppo_v4
 
 
 @dataclass
 class Args:
-    exp_name: str = os.path.basename(__file__)[: -len(".py")]
+    exp_name: str = "snake learning parallel"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -46,11 +47,11 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "FireboyAndWatergirl-sac-v0"
+    env_id: str = "FireboyAndWatergirl-ppo-v4"
     """the id of the environment"""
-    total_timesteps: int = 2000000
+    total_timesteps: int = 2_000_000
     """total timesteps of the experiments"""
-    buffer_size: int = int(256000)
+    buffer_size: int = int(256000/6)
     """the replay memory buffer size"""  # smaller than in original paper but evaluation is done only for 100k steps anyway
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -62,7 +63,7 @@ class Args:
     """timestep to start learning"""
     policy_lr: float = 3e-4
     """the learning rate of the policy network optimizer"""
-    q_lr: float = 3e-4*2
+    q_lr: float = 3e-4
     """the learning rate of the Q network network optimizer"""
     update_frequency: int = 4
     """the frequency of training updates"""
@@ -143,13 +144,18 @@ class SoftQNetwork(nn.Module):
             output_dim = self.conv(torch.zeros(1, *obs_shape)).shape[1]
 
         self.fc1 = layer_init(nn.Linear(output_dim, 512))
-        self.fc_q = layer_init(nn.Linear(512, envs.single_action_space.n))
+        # Modify for MultiDiscrete: Create separate Q-values for each action dimension
+        # Get dimensions from MultiDiscrete
+        self.action_dims = envs.single_action_space.nvec
+        self.fc_qs = nn.ModuleList([
+            layer_init(nn.Linear(512, dim)) for dim in self.action_dims
+        ])
 
     def forward(self, x):
         x = F.relu(self.conv(x / 255.0))
         x = F.relu(self.fc1(x))
-        q_vals = self.fc_q(x)
-        return q_vals
+        # Return Q-values for each action dimension
+        return [fc_q(x) for fc_q in self.fc_qs]
 
 
 class Actor(nn.Module):
@@ -169,23 +175,37 @@ class Actor(nn.Module):
             output_dim = self.conv(torch.zeros(1, *obs_shape)).shape[1]
 
         self.fc1 = layer_init(nn.Linear(output_dim, 512))
-        self.fc_logits = layer_init(nn.Linear(512, envs.single_action_space.n))
+        # Modify for MultiDiscrete: Create separate logits for each action dimension
+        self.action_dims = envs.single_action_space.nvec
+        self.fc_logits = nn.ModuleList([
+            layer_init(nn.Linear(512, dim)) for dim in self.action_dims
+        ])
 
     def forward(self, x):
         x = F.relu(self.conv(x))
         x = F.relu(self.fc1(x))
-        logits = self.fc_logits(x)
-
-        return logits
+        return [fc_logit(x) for fc_logit in self.fc_logits]
 
     def get_action(self, x):
         logits = self(x / 255.0)
-        policy_dist = Categorical(logits=logits)
-        action = policy_dist.sample()
-        # Action probabilities for calculating the adapted soft-Q loss
-        action_probs = policy_dist.probs
-        log_prob = F.log_softmax(logits, dim=1)
-        return action, log_prob, action_probs
+        # Create separate distributions for each action dimension
+        policy_dists = [Categorical(logits=logit) for logit in logits]
+
+        if len(x.shape) == 4:  # If batch of observations
+            actions = torch.stack([dist.sample()
+                                  for dist in policy_dists], dim=1)
+            log_probs = torch.stack([F.log_softmax(logit, dim=1)
+                                    for logit in logits], dim=1)
+            action_probs = torch.stack(
+                [F.softmax(logit, dim=1) for logit in logits], dim=1)
+        else:  # If single observation
+            actions = torch.tensor([dist.sample() for dist in policy_dists])
+            log_probs = torch.stack(
+                [F.log_softmax(logit, dim=0) for logit in logits])
+            action_probs = torch.stack(
+                [F.softmax(logit, dim=0) for logit in logits])
+
+        return actions, log_probs, action_probs
 
 
 if __name__ == "__main__":
@@ -231,8 +251,8 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
     # env setup
     envs = gym.vector.SyncVectorEnv(
         [make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
-    assert isinstance(envs.single_action_space,
-                      gym.spaces.Discrete), "only discrete action space is supported"
+    # assert isinstance(envs.single_action_space,
+    #                   gym.spaces.Discrete), "only discrete action space is supported"
 
     actor = Actor(envs).to(device)
     qf1 = SoftQNetwork(envs).to(device)
@@ -250,7 +270,8 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
     # Automatic entropy tuning
     if args.autotune:
         target_entropy = -args.target_entropy_scale * \
-            torch.log(1 / torch.tensor(envs.single_action_space.n))
+            sum([torch.log(1 / torch.tensor(dim))
+                for dim in envs.single_action_space.nvec])
         log_alpha = torch.zeros(1, requires_grad=True, device=device)
         alpha = log_alpha.exp().item()
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr, eps=1e-4)
@@ -317,42 +338,61 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
                 with torch.no_grad():
                     _, next_state_log_pi, next_state_action_probs = actor.get_action(
                         data.next_observations)
-                    qf1_next_target = qf1_target(data.next_observations)
-                    qf2_next_target = qf2_target(data.next_observations)
-                    # we can use the action probabilities instead of MC sampling to estimate the expectation
-                    min_qf_next_target = next_state_action_probs * (
-                        torch.min(qf1_next_target, qf2_next_target) -
-                        alpha * next_state_log_pi
-                    )
-                    # adapt Q-target for discrete Q-function
-                    min_qf_next_target = min_qf_next_target.sum(dim=1)
-                    next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * \
-                        args.gamma * (min_qf_next_target)
+                    qf1_next_targets = qf1_target(data.next_observations)
+                    qf2_next_targets = qf2_target(data.next_observations)
 
-                # use Q-values only for the taken actions
-                qf1_values = qf1(data.observations)
-                qf2_values = qf2(data.observations)
-                qf1_a_values = qf1_values.gather(
-                    1, data.actions.long()).view(-1)
-                qf2_a_values = qf2_values.gather(
-                    1, data.actions.long()).view(-1)
-                qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
-                qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
+                    # Initialize next Q-value
+                    min_qf_next_target = torch.zeros(
+                        args.batch_size, device=device)
+
+                    # Handle each action dimension separately
+                    for dim in range(len(actor.action_dims)):
+                        min_qf_next = torch.min(
+                            qf1_next_targets[dim], qf2_next_targets[dim])
+                        # Compute expected Q-values for each action
+                        next_q_pi = (
+                            next_state_action_probs[..., dim, :] * min_qf_next).sum(dim=1)
+                        # Add entropy term
+                        min_qf_next_target += next_q_pi - alpha * (next_state_action_probs[..., dim, :] *
+                                                                   next_state_log_pi[..., dim, :]).sum(dim=1)
+
+                    # Compute target Q-value
+                    next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * \
+                        args.gamma * min_qf_next_target
+
+                # Compute Q-losses for each action dimension
+                qf1_loss = 0
+                qf2_loss = 0
+                for dim in range(len(actor.action_dims)):
+                    # Get tensor for this dimension
+                    qf1_values = qf1(data.observations)[dim]
+                    qf2_values = qf2(data.observations)[dim]
+                    qf1_a_values = qf1_values.gather(
+                        1, data.actions[..., dim].unsqueeze(-1)).squeeze(-1)
+                    qf2_a_values = qf2_values.gather(
+                        1, data.actions[..., dim].unsqueeze(-1)).squeeze(-1)
+                    qf1_loss += F.mse_loss(qf1_a_values, next_q_value)
+                    qf2_loss += F.mse_loss(qf2_a_values, next_q_value)
+
+                # Total loss is the sum of losses for each action dimension
                 qf_loss = qf1_loss + qf2_loss
 
                 q_optimizer.zero_grad()
                 qf_loss.backward()
                 q_optimizer.step()
 
-                # ACTOR training
+                # ACTOR training (also needs to be modified for multiple dimensions)
                 _, log_pi, action_probs = actor.get_action(data.observations)
+                actor_loss = 0
+
                 with torch.no_grad():
-                    qf1_values = qf1(data.observations)
-                    qf2_values = qf2(data.observations)
-                    min_qf_values = torch.min(qf1_values, qf2_values)
-                # no need for reparameterization, the expectation can be calculated for discrete actions
-                actor_loss = (
-                    action_probs * ((alpha * log_pi) - min_qf_values)).mean()
+                    qf1_pi = qf1(data.observations)
+                    qf2_pi = qf2(data.observations)
+
+                for dim in range(len(actor.action_dims)):
+                    min_qf_pi = torch.min(qf1_pi[dim], qf2_pi[dim])
+                    actor_loss += (action_probs[..., dim, :] *
+                                   (alpha * log_pi[..., dim, :] - min_qf_pi)).mean()
 
                 actor_optimizer.zero_grad()
                 actor_loss.backward()

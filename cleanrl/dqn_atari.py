@@ -21,10 +21,12 @@ from stable_baselines3.common.atari_wrappers import (
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 
+import cleanrl.fireboy_and_watergirl_ppo_v4
+
 
 @dataclass
 class Args:
-    exp_name: str = os.path.basename(__file__)[: -len(".py")]
+    exp_name: str = "DQN snake learning parallel"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -48,15 +50,15 @@ class Args:
     """the user or org name of the model repository from the Hugging Face Hub"""
 
     # Algorithm specific arguments
-    env_id: str = "BreakoutNoFrameskip-v4"
+    env_id: str = "FireboyAndWatergirl-ppo-v4"
     """the id of the environment"""
-    total_timesteps: int = 10000000
+    total_timesteps: int = 10_000_000
     """total timesteps of the experiments"""
     learning_rate: float = 1e-4
     """the learning rate of the optimizer"""
     num_envs: int = 1
     """the number of parallel game environments"""
-    buffer_size: int = 1000000
+    buffer_size: int = int(1000000 * 0.1)
     """the replay memory buffer size"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -72,7 +74,7 @@ class Args:
     """the ending epsilon for exploration"""
     exploration_fraction: float = 0.10
     """the fraction of `total-timesteps` it takes from start-e to go end-e"""
-    learning_starts: int = 80000
+    learning_starts: int = 8000
     """timestep to start learning"""
     train_frequency: int = 4
     """the frequency of training"""
@@ -107,7 +109,10 @@ def make_env(env_id, seed, idx, capture_video, run_name):
 class QNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
-        self.network = nn.Sequential(
+        # Get dimensions from MultiDiscrete
+        self.action_dims = env.single_action_space.nvec
+
+        self.features = nn.Sequential(
             nn.Conv2d(4, 32, 8, stride=4),
             nn.ReLU(),
             nn.Conv2d(32, 64, 4, stride=2),
@@ -117,11 +122,16 @@ class QNetwork(nn.Module):
             nn.Flatten(),
             nn.Linear(3136, 512),
             nn.ReLU(),
-            nn.Linear(512, env.single_action_space.n),
         )
 
+        # Separate output heads for each action dimension
+        self.heads = nn.ModuleList([
+            nn.Linear(512, dim) for dim in self.action_dims
+        ])
+
     def forward(self, x):
-        return self.network(x / 255.0)
+        features = self.features(x / 255.0)
+        return [head(features) for head in self.heads]
 
 
 def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
@@ -157,7 +167,8 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
-        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "|param|value|\n|-|-|\n%s" % (
+            "\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -166,13 +177,16 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name) for i in range(args.num_envs)]
+        [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name)
+         for i in range(args.num_envs)]
     )
-    assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
+    # assert isinstance(envs.single_action_space,
+    #                   gym.spaces.Discrete), "only discrete action space is supported"
 
     q_network = QNetwork(envs).to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
@@ -193,23 +207,35 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
     obs, _ = envs.reset(seed=args.seed)
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
-        epsilon = linear_schedule(args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step)
+        epsilon = linear_schedule(
+            args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step)
+        # Replace the random action sampling part with:
         if random.random() < epsilon:
-            actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
+            # Correctly sample from MultiDiscrete space
+            actions = np.array([
+                envs.single_action_space.sample()
+                for _ in range(envs.num_envs)
+            ])
         else:
             q_values = q_network(torch.Tensor(obs).to(device))
-            actions = torch.argmax(q_values, dim=1).cpu().numpy()
-
+            actions = np.stack([
+                torch.argmax(q_value, dim=1).cpu().numpy()
+                for q_value in q_values
+            ], axis=1)
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, rewards, terminations, truncations, infos = envs.step(actions)
+        next_obs, rewards, terminations, truncations, infos = envs.step(
+            actions)
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
                 if info and "episode" in info:
-                    print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                    writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                    writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+                    print(
+                        f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                    writer.add_scalar("charts/episodic_return",
+                                      info["episode"]["r"], global_step)
+                    writer.add_scalar("charts/episodic_length",
+                                      info["episode"]["l"], global_step)
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
@@ -222,20 +248,31 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
         obs = next_obs
 
         # ALGO LOGIC: training.
+        # Replace the loss computation part
         if global_step > args.learning_starts:
             if global_step % args.train_frequency == 0:
                 data = rb.sample(args.batch_size)
                 with torch.no_grad():
-                    target_max, _ = target_network(data.next_observations).max(dim=1)
-                    td_target = data.rewards.flatten() + args.gamma * target_max * (1 - data.dones.flatten())
-                old_val = q_network(data.observations).gather(1, data.actions).squeeze()
-                loss = F.mse_loss(td_target, old_val)
+                    next_q_values = target_network(data.next_observations)
+                    target_max = torch.stack([
+                        q_values.max(dim=1)[0]
+                        for q_values in next_q_values
+                    ], dim=1)
+                    td_target = data.rewards.flatten() + args.gamma * target_max.mean(dim=1) * \
+                        (1 - data.dones.flatten())
+
+                current_q_values = q_network(data.observations)
+                total_loss = 0
+                for dim, (q_values, action) in enumerate(zip(current_q_values, data.actions.T)):
+                    q_value = q_values.gather(1, action.unsqueeze(1)).squeeze()
+                    loss = F.mse_loss(td_target, q_value)
+                    total_loss += loss
 
                 if global_step % 100 == 0:
-                    writer.add_scalar("losses/td_loss", loss, global_step)
-                    writer.add_scalar("losses/q_values", old_val.mean().item(), global_step)
-                    print("SPS:", int(global_step / (time.time() - start_time)))
-                    writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+                    writer.add_scalar("losses/td_loss",
+                                      total_loss, global_step)
+                    writer.add_scalar("losses/q_values",
+                                      q_value.mean().item(), global_step)
 
                 # optimize the model
                 optimizer.zero_grad()
@@ -246,7 +283,8 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
             if global_step % args.target_network_frequency == 0:
                 for target_network_param, q_network_param in zip(target_network.parameters(), q_network.parameters()):
                     target_network_param.data.copy_(
-                        args.tau * q_network_param.data + (1.0 - args.tau) * target_network_param.data
+                        args.tau * q_network_param.data +
+                        (1.0 - args.tau) * target_network_param.data
                     )
 
     if args.save_model:
@@ -273,7 +311,8 @@ poetry run pip install "stable_baselines3==2.0.0a1" "gymnasium[atari,accept-rom-
 
             repo_name = f"{args.env_id}-{args.exp_name}-seed{args.seed}"
             repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
-            push_to_hub(args, episodic_returns, repo_id, "DQN", f"runs/{run_name}", f"videos/{run_name}-eval")
+            push_to_hub(args, episodic_returns, repo_id, "DQN",
+                        f"runs/{run_name}", f"videos/{run_name}-eval")
 
     envs.close()
     writer.close()

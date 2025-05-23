@@ -194,10 +194,6 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Check if the game is done
         self.done = self._check_done()
-        if self.done:
-            # print('DONE!')
-            self.draw_observation(self.state)
-            # Track if episode was successful (all stars collected)
 
         self.steps += 1
         if self.steps == self.max_steps and self.game.index % self.envs == 0:
