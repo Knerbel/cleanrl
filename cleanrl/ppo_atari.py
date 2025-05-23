@@ -27,6 +27,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 import cleanrl.fireboy_and_watergirl_ppo_v3_recR
 import cleanrl.fireboy_and_watergirl_ppo_v3_singleR
 import cleanrl.fireboy_and_watergirl_ppo_v4
+import cleanrl.fireboy_and_watergirl_ppo_v5
 
 
 @dataclass
@@ -49,7 +50,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v4'  # "BreakoutNoFrameskip-v4"
+    env_id: str = 'FireboyAndWatergirl-ppo-v5'  # "BreakoutNoFrameskip-v4"
     """the id of the environment"""
     total_timesteps: int = 1000_000
     """total timesteps of the experiments"""
@@ -57,7 +58,7 @@ class Args:
     """the learning rate of the optimizer"""
     num_envs: int = 8
     """the number of parallel game environments"""
-    num_steps: int = 128
+    num_steps: int = 128 * 2
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
@@ -272,6 +273,9 @@ if __name__ == "__main__":
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminations, truncations, infos = envs.step(
                 action.cpu().numpy())
+
+            # Add logging for exploration metrics
+            #
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(
@@ -286,6 +290,12 @@ if __name__ == "__main__":
                             "charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar(
                             "charts/episodic_length", info["episode"]["l"], global_step)
+                        writer.add_scalar(
+                            "charts/stars_collected", info["stars_collected"], global_step)
+                        writer.add_scalar(
+                            "charts/unique_positions", info["unique_positions"], global_step)
+                        writer.add_scalar(
+                            "charts/finished", info["finished"], global_step)
 
         # bootstrap value if not done
         with torch.no_grad():
