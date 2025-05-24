@@ -216,20 +216,20 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.done = self._check_done()
 
         self.steps += 1
-        if self.steps == self.max_steps and self.game.index % self.envs == 0:
-            self._get_state(draw=True)
-        if self.steps >= self.max_steps:
-            self.done = True
+        # if self.steps == self.max_steps and self.game.index % self.envs == 0:
+        #     self._get_state(draw=True)
+        # if self.steps >= self.max_steps:
+        #     self.done = True
 
-        if self.done:
-            # Identify the best environment based on cumulative rewards
-            best_env_index = np.argmax(self.cumulative_rewards)
-            # Draw the observation of the best-performing environment
-            if self.game.index == best_env_index:
-                self.draw_observation(self.state)
+        # if self.done:
+        #     # Identify the best environment based on cumulative rewards
+        #     best_env_index = np.argmax(self.cumulative_rewards)
+        #     # Draw the observation of the best-performing environment
+        #     if self.game.index == best_env_index:
+        #         self.draw_observation(self.state)
 
-            success = self._check_done() and self.steps < self.max_steps
-            self.episode_results.append(1 if success else 0)
+        #     success = self._check_done() and self.steps < self.max_steps
+        #     self.episode_results.append(1 if success else 0)
 
         # Add visit counts to info dict
         info = {
@@ -237,6 +237,9 @@ class FireboyAndWatergirlEnv(gym.Env):
             "stars_collected": sum(star.is_collected for star in self.stars),
             "finished": 1 if self.done else 0,
         }
+
+        if self.steps >= self.max_steps:
+            self.done = True
 
         return self.state, reward, self.done, False, info
 
@@ -462,17 +465,17 @@ class FireboyAndWatergirlEnv(gym.Env):
                 reward += 10
                 star.reward_given = True
 
-        # Curiosity reward based on visited positions
-        fb_pos = tuple(np.array(self.fire_boy.get_position()) //
-                       (16 * self.position_grid_size))
-        wg_pos = tuple(np.array(self.water_girl.get_position()) //
-                       (16 * self.position_grid_size))
-        current_positions = (fb_pos, wg_pos)
+        # # Curiosity reward based on visited positions
+        # fb_pos = tuple(np.array(self.fire_boy.get_position()) //
+        #                (16 * self.position_grid_size))
+        # wg_pos = tuple(np.array(self.water_girl.get_position()) //
+        #                (16 * self.position_grid_size))
+        # current_positions = (fb_pos, wg_pos)
 
-        # Add exploration bonus for new positions
-        if current_positions not in self.visited_positions:
-            reward += self.exploration_bonus
-            self.visited_positions.add(current_positions)
+        # # Add exploration bonus for new positions
+        # if current_positions not in self.visited_positions:
+        #     reward += self.exploration_bonus
+        #     self.visited_positions.add(current_positions)
 
         if self._check_done():
             reward *= 10
