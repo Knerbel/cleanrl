@@ -32,7 +32,7 @@ import cleanrl.fireboy_and_watergirl_ppo_v5
 
 @dataclass
 class Args:
-    exp_name: str = "snake learning parallel"
+    exp_name: str = "snake learning parallel new Model"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -108,8 +108,8 @@ def make_env(env_id, idx, capture_video, run_name):
         if "FIRE" in env.unwrapped.get_action_meanings():
             env = FireResetEnv(env)
         env = ClipRewardEnv(env)
-        env = gym.wrappers.ResizeObservation(env, (84, 84))
-        env = gym.wrappers.GrayScaleObservation(env)
+        env = gym.wrappers.ResizeObservation(env, (23, 32))
+        # env = gym.wrappers.GrayScaleObservation(env)
         env = gym.wrappers.FrameStack(env, 4)
         return env
 
@@ -125,29 +125,33 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
+        # For RGB input, input channels = 3 * 4 = 12 (4 stacked RGB frames)
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(4, 64, 8, stride=4)),   # More filters
+            # (12, 23, 34) -> (64, 11, 16)
+            layer_init(nn.Conv2d(12, 64, 3, stride=2)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(64, 128, 4, stride=2)),  # More filters
+            # (64, 11, 16) -> (128, 5, 7)
+            layer_init(nn.Conv2d(64, 128, 3, stride=2)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(128, 128, 3, stride=1)),  # More filters
-            nn.ReLU(),
-            layer_init(nn.Conv2d(128, 128, 3, stride=1)),  # Extra conv layer
+            # (128, 5, 7) -> (128, 3, 5)
+            layer_init(nn.Conv2d(128, 128, 3, stride=1)),
             nn.ReLU(),
             nn.Flatten(),
-            # Larger FC layer, adjust shape if needed
-            layer_init(nn.Linear(128 * 5 * 5, 1024)),
-            nn.ReLU(),
-            layer_init(nn.Linear(1024, 512)),            # Extra FC layer
+            layer_init(nn.Linear(128 * 3 * 5, 512)),
             nn.ReLU(),
         )
         self.actor = layer_init(nn.Linear(512, 8), std=0.01)
         self.critic = layer_init(nn.Linear(512, 1), std=1)
 
     def get_value(self, x):
+        # x shape: (batch, 4, 23, 34, 3) from env, need to reshape to (batch, 12, 23, 34)
+        x = x.permute(0, 1, 4, 2, 3).reshape(
+            x.shape[0], -1, x.shape[2], x.shape[3])
         return self.critic(self.network(x / 255.0))
 
     def get_action_and_value(self, x, action=None):
+        x = x.permute(0, 1, 4, 2, 3).reshape(
+            x.shape[0], -1, x.shape[2], x.shape[3])
         hidden = self.network(x / 255.0)
         logits = self.actor(hidden)
         logits1, logits2 = logits.split(4, dim=-1)
@@ -242,26 +246,25 @@ if __name__ == "__main__":
             global_step += args.num_envs
 
             # Inside the training loop, before calling the agent
-            # if (global_step//args.num_envs) % 100 == 0:  # Save every 1000 steps
-            #     print('Foobar')
-            #     # Convert the observation tensor to a NumPy array
-            #     # Take the first environment's observation
-            #     obs_image = next_obs[0].cpu().numpy()
+            if (global_step//args.num_envs) % 100 == 0:  # Save every 1000 steps
+                # Convert the observation tensor to a NumPy array
+                # Take the first environment's observation
+                obs_image = next_obs[0].cpu().numpy()
 
-            #     # Reshape and normalize the observation for visualization
-            #     # Convert from (C, H, W) to (H, W, C)
-            #     obs_image = obs_image.transpose(1, 2, 0)
-            #     # Normalize to [0, 1] for visualization
-            #     obs_image = obs_image / 255.0
+                # Reshape and normalize the observation for visualization
+                # Convert from (C, H, W) to (H, W, C)
+                obs_image = obs_image[0]  # .transpose(1, 2, 0)
+                # Normalize to [0, 1] for visualization
+                obs_image = obs_image / 255.0
 
-            #     # Plot and save the image
-            #     plt.figure(figsize=(6, 6))
-            #     plt.imshow(obs_image, cmap="gray")
-            #     plt.axis("off")
-            #     plt.title(f"Input to Agent at Step {global_step}")
-            #     plt.savefig(
-            #         f"agent_input_step_{global_step}.png", bbox_inches="tight", pad_inches=0)
-            #     plt.close()
+                # Plot and save the image
+                plt.figure(figsize=(10, 3))
+
+                plt.imshow(obs_image, cmap="gray")
+                plt.axis("off")
+                plt.savefig(
+                    f"agent_input_step.png", bbox_inches="tight", pad_inches=0)
+                plt.close()
 
             obs[step] = next_obs
             dones[step] = next_done
@@ -296,6 +299,8 @@ if __name__ == "__main__":
                             "charts/episodic_length", info["episode"]["l"], global_step)
                         writer.add_scalar(
                             "charts/stars_collected", info["stars_collected"], global_step)
+                        writer.add_scalar(
+                            "charts/zero_reward", info["zero_reward"], global_step)
                         writer.add_scalar(
                             "charts/unique_positions", info["unique_positions"], global_step)
                         writer.add_scalar(

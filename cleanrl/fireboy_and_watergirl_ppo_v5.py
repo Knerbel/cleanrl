@@ -236,6 +236,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             "unique_positions": len(self.visited_positions),
             "stars_collected": sum(star.is_collected for star in self.stars),
             "finished": 1 if self.done else 0,
+            "zero_reward": 1 if reward == 0 else 0,
         }
 
         if self.steps >= self.max_steps:
