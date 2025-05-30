@@ -56,7 +56,7 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 2 * 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 8
+    num_envs: int = 1  # 8
     """the number of parallel game environments"""
     num_steps: int = 128 * 2
     """the number of steps to run in each environment per policy rollout"""
@@ -413,6 +413,8 @@ if __name__ == "__main__":
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step /
                           (time.time() - start_time)), global_step)
+        print(
+            f"Learning iteration {iteration}/{args.num_iterations} completed")
 
     envs.close()
     writer.close()

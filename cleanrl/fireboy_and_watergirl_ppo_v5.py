@@ -5,6 +5,9 @@ from gymnasium import spaces
 from matplotlib import pyplot as plt
 import numpy as np
 from gymnasium.envs.registration import register
+import cv2  # Add this import at the top with other imports
+import os
+import time
 
 from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import FireBoy, WaterGirl
@@ -12,10 +15,6 @@ from fireboy_and_watergirl.doors import FireDoor, WaterDoor
 from fireboy_and_watergirl.game import Game
 from fireboy_and_watergirl.gates import Gates
 from fireboy_and_watergirl.stars import Stars
-
-# Add these imports at the top
-import hashlib
-from collections import defaultdict
 
 
 class FireboyAndWatergirlEnv(gym.Env):
@@ -46,11 +45,14 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Initialize game state
         self.state = None
         self.done = False
+
+        self.games = 0
+
         self._load_level()
 
         self.steps = 0
         self.max_steps = 128 * 2  # 400
-        self.envs = 8
+        self.envs = 1  # 8
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
         self.level_width = 34 - 2   # Assuming 1-tile border on left and right
@@ -68,6 +70,13 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.exploration_bonus = 0.1  # Bonus reward for new positions
         self.position_grid_size = 4  # Size of grid cells for position discretization
 
+        self.cumulative_rewards = np.zeros(self.envs)
+        self.video_scale = 16
+        self.video_folder = "episode_videos"
+        if not os.path.exists(self.video_folder):
+            os.makedirs(self.video_folder)
+        self.video_writer = None
+
     def get_action_meanings(self):
         return [
             "NOOP",
@@ -80,6 +89,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         """
         Load the level data from the file and dynamically set up the game components.
         """
+
         with open('./fireboy_and_watergirl/data/'+self.level+'.txt', 'r') as file:
             level_data = [line.strip().split(',') for line in file.readlines()]
 
@@ -97,17 +107,17 @@ class FireboyAndWatergirlEnv(gym.Env):
         y = 21
         for x in range(len(level_data[0])):
             if (level_data[y][x] == ' ' and
-                        y < len(level_data) - 1
-                        # and
-                    # level_data[y + 1][x] in ['S', 'G']
+                    y < len(level_data) - 1
+                    # and
+                        # level_data[y + 1][x] in ['S', 'G']
                     ):
                 valid_positions.append((x, y))
         y = 15
         for x in range(len(level_data[0])):
             if (level_data[y][x] == ' ' and
-                        y < len(level_data) - 1
-                        # and
-                    # level_data[y + 1][x] in ['S', 'G']
+                    y < len(level_data) - 1
+                    # and
+                        # level_data[y + 1][x] in ['S', 'G']
                     ):
                 valid_positions.append((x, y))
 
@@ -176,22 +186,32 @@ class FireboyAndWatergirlEnv(gym.Env):
                     self.doors.append(WaterDoor(pos))
 
     def reset(self, seed=None, options=None):
-        """
-        Reset the environment to its initial state and return the initial observation.
-        """
         super().reset(seed=seed)
+
+        # Get the current env index and its cumulative reward
+        current_env = self.game.index
+        self.cumulative_rewards[current_env] = 0
+
+        # Start a new video for the new episode (temporary name)
+        if self.video_writer is not None:
+            self.video_writer.release()
+        video_path = os.path.join(
+            self.video_folder,
+            f"Temp.mp4"
+        )
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        self.video_writer = cv2.VideoWriter(
+            video_path, fourcc, 30.0,
+            (self.level_width * self.video_scale,
+             self.level_height * self.video_scale)
+        )
 
         self._load_level()
         self.state = self._get_state()
         self.done = False
         self.steps = 0
 
-        # Reset cumulative rewards
-        if not hasattr(self, "cumulative_rewards"):
-            self.cumulative_rewards = np.zeros(self.envs)
-        self.cumulative_rewards[:] = 0
-
-        self.visited_positions.clear()
+        self.games += 1
 
         return self.state, {}
 
@@ -207,29 +227,14 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Compute reward
         reward = self._compute_reward()
 
-        # Update cumulative rewards for this environment
-        if not hasattr(self, "cumulative_rewards"):
-            self.cumulative_rewards = np.zeros(self.envs)
-        self.cumulative_rewards[self.game.index] += reward
+        # Update cumulative reward for current environment
+        current_env = self.game.index
+        self.cumulative_rewards[current_env] += reward
 
         # Check if the game is done
         self.done = self._check_done()
 
         self.steps += 1
-        # if self.steps == self.max_steps and self.game.index % self.envs == 0:
-        #     self._get_state(draw=True)
-        # if self.steps >= self.max_steps:
-        #     self.done = True
-
-        # if self.done:
-        #     # Identify the best environment based on cumulative rewards
-        #     best_env_index = np.argmax(self.cumulative_rewards)
-        #     # Draw the observation of the best-performing environment
-        #     if self.game.index == best_env_index:
-        #         self.draw_observation(self.state)
-
-        #     success = self._check_done() and self.steps < self.max_steps
-        #     self.episode_results.append(1 if success else 0)
 
         # Add visit counts to info dict
         info = {
@@ -238,6 +243,32 @@ class FireboyAndWatergirlEnv(gym.Env):
             "finished": 1 if self.done else 0,
             "zero_reward": 1 if reward == 0 else 0,
         }
+
+        # Capture frame for video
+        if self.video_writer is not None:
+            frame = cv2.cvtColor(self.state, cv2.COLOR_RGB2BGR)
+            frame = cv2.resize(frame, (self.level_width * self.video_scale, self.level_height * self.video_scale),
+                               interpolation=cv2.INTER_NEAREST)
+            self.video_writer.write(frame)
+
+        # Save and close video at the end of the episode with correct reward
+        if self.done:
+            if self.video_writer is not None:
+                final_reward = self.cumulative_rewards[current_env]
+                temp_path = os.path.join(
+                    self.video_folder,
+                    f"Temp.mp4"
+                )
+                video_path = os.path.join(
+                    self.video_folder,
+                    f"GamePlay{self.games}_{self.game.index}_{final_reward:.2f}.mp4"
+                )
+                self.video_writer.release()
+                self.video_writer = None
+                if os.path.exists(temp_path):
+                    os.rename(temp_path, video_path)
+                else:
+                    print(f"Warning: Temp video file not found: {temp_path}")
 
         if self.steps >= self.max_steps:
             self.done = True
@@ -268,7 +299,6 @@ class FireboyAndWatergirlEnv(gym.Env):
         if mode == "human":
             rgb_image = self._get_state()
             if not hasattr(FireboyAndWatergirlEnv, 'plt_initialized'):
-                print("Initializing matplotlib...")
                 import matplotlib
                 matplotlib.use('TkAgg')
                 import matplotlib.pyplot as plt
@@ -310,7 +340,9 @@ class FireboyAndWatergirlEnv(gym.Env):
             return self._get_state()
 
     def close(self):
-        pass
+        if self.video_writer is not None:
+            self.video_writer.release()
+            self.video_writer = None
 
     def _get_state(self, draw=False):
         level_data = self.board.get_level_data()
@@ -455,7 +487,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.stars, [self.fire_boy, self.water_girl])
 
     def _compute_reward(self):
-        reward = 0  # -0.001  # Time penalty
+        reward = 0
 
         # Vectorized reward for stars
         stars = np.array(self.stars)
@@ -465,18 +497,6 @@ class FireboyAndWatergirlEnv(gym.Env):
             if is_collected[i] and not reward_given[i]:
                 reward += 10
                 star.reward_given = True
-
-        # # Curiosity reward based on visited positions
-        # fb_pos = tuple(np.array(self.fire_boy.get_position()) //
-        #                (16 * self.position_grid_size))
-        # wg_pos = tuple(np.array(self.water_girl.get_position()) //
-        #                (16 * self.position_grid_size))
-        # current_positions = (fb_pos, wg_pos)
-
-        # # Add exploration bonus for new positions
-        # if current_positions not in self.visited_positions:
-        #     reward += self.exploration_bonus
-        #     self.visited_positions.add(current_positions)
 
         if self._check_done():
             reward *= 10
