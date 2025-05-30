@@ -13,15 +13,10 @@ import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
-# Import your Fireboy and Watergirl environment to ensure it's registered
-import cleanrl.fireboy_and_watergirl_ppo_v5
-
 
 @dataclass
 class Args:
-    render: bool = False
-    """if toggled, the environment will be rendered"""
-    exp_name: str = "snake learning parallel new PPO Model"
+    exp_name: str = os.path.basename(__file__)[: -len(".py")]
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -39,18 +34,17 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    # env_id: str = "FireboyAndWatergirl-ppo-v0"  # "CartPole-v1"
-    env_id: str = "FireboyAndWatergirl-ppo-v5"  # "CartPole-v1"
+    env_id: str = "CartPole-v1"
     """the id of the environment"""
-    total_timesteps: int = 1000000
+    total_timesteps: int = 500000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 8
+    num_envs: int = 4
     """the number of parallel game environments"""
-    num_steps: int = 128 * 2
+    num_steps: int = 128
     """the number of steps to run in each environment per policy rollout"""
-    anneal_lr: bool = False
+    anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -88,7 +82,6 @@ def make_env(env_id, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
-            env.env_index = idx
             env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         else:
             env = gym.make(env_id)
@@ -104,82 +97,35 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 
 
-class NormalizeLayer(nn.Module):
-    def forward(self, x):
-        return x.float() / 255.0
-
-
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
-
-        # Calculate flattened input size
-        self.obs_size = np.prod(
-            envs.single_observation_space.shape)  # 23 * 32 * 3 = 2208
-
         self.critic = nn.Sequential(
-            # Normalize pixels to [0,1] range
-            NormalizeLayer(),
-            # Flatten the image
-            nn.Flatten(),
-            layer_init(nn.Linear(self.obs_size, 64)),
+            layer_init(
+                nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 1), std=1.0),
         )
-
-        # Two separate actors for each action dimension
-        self.actor1 = nn.Sequential(
-            # Normalize pixels to [0,1] range
-            NormalizeLayer(),
-            # Flatten the image
-            nn.Flatten(),
-            layer_init(nn.Linear(self.obs_size, 64)),
+        self.actor = nn.Sequential(
+            layer_init(
+                nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),
-            # 4 actions for first character
-            layer_init(nn.Linear(64, 4), std=0.01),
-        )
-
-        self.actor2 = nn.Sequential(
-            # Normalize pixels to [0,1] range
-            NormalizeLayer(),
-            # Flatten the image
-            nn.Flatten(),
-            layer_init(nn.Linear(self.obs_size, 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
-            nn.Tanh(),
-            # 4 actions for second character
-            layer_init(nn.Linear(64, 4), std=0.01),
+            layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01),
         )
 
     def get_value(self, x):
         return self.critic(x)
 
     def get_action_and_value(self, x, action=None):
-        logits1 = self.actor1(x)
-        logits2 = self.actor2(x)
-        probs1 = Categorical(logits=logits1)
-        probs2 = Categorical(logits=logits2)
-
+        logits = self.actor(x)
+        probs = Categorical(logits=logits)
         if action is None:
-            action1 = probs1.sample()
-            action2 = probs2.sample()
-            action = torch.stack([action1, action2], dim=1)
-        else:
-            action1 = action[:, 0]
-            action2 = action[:, 1]
-
-        return (
-            action,
-            torch.stack([probs1.log_prob(action1),
-                        probs2.log_prob(action2)], dim=1),
-            torch.stack([probs1.entropy(), probs2.entropy()], dim=1),
-            self.critic(x)
-        )
+            action = probs.sample()
+        return action, probs.log_prob(action), probs.entropy(), self.critic(x)
 
 
 if __name__ == "__main__":
@@ -217,16 +163,12 @@ if __name__ == "__main__":
         "cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    envs = gym.vector.AsyncVectorEnv(
+    envs = gym.vector.SyncVectorEnv(
         [make_env(args.env_id, i, args.capture_video, run_name)
          for i in range(args.num_envs)],
     )
     assert isinstance(envs.single_action_space,
-                      gym.spaces.MultiDiscrete), "only multidiscrete action space is supported"
-    assert np.array_equal(envs.single_action_space.nvec,
-                          [4, 4]), "This environment expects actions [4,4]"
-    # assert isinstance(envs.single_action_space,
-    #                   gym.spaces.Discrete), "only discrete action space is supported"
+                      gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -234,10 +176,9 @@ if __name__ == "__main__":
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) +
                       envs.single_observation_space.shape).to(device)
-    actions = torch.zeros((args.num_steps, args.num_envs, 2), dtype=torch.long).to(
-        device)  # 2 for two actions
-    logprobs = torch.zeros((args.num_steps, args.num_envs, 2)).to(
-        device)  # 2 for two action probabilities
+    actions = torch.zeros((args.num_steps, args.num_envs) +
+                          envs.single_action_space.shape).to(device)
+    logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -277,9 +218,6 @@ if __name__ == "__main__":
             next_obs, next_done = torch.Tensor(next_obs).to(
                 device), torch.Tensor(next_done).to(device)
 
-            if args.render:
-                envs.envs[0].render()
-
             if "final_info" in infos:
                 for info in infos["final_info"]:
                     if info and "episode" in info:
@@ -289,19 +227,6 @@ if __name__ == "__main__":
                             "charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar(
                             "charts/episodic_length", info["episode"]["l"], global_step)
-                        writer.add_scalar(
-                            "charts/stars_collected", info["stars_collected"], global_step)
-                        writer.add_scalar(
-                            "charts/zero_reward", info["zero_reward"], global_step)
-                        writer.add_scalar(
-                            "charts/unique_positions", info["unique_positions"], global_step)
-                        writer.add_scalar(
-                            "charts/finished", info["finished"], global_step)
-
-        # Reset the game after num_steps
-        next_obs, _ = envs.reset(seed=args.seed)
-        next_obs = torch.Tensor(next_obs).to(device)
-        next_done = torch.zeros(args.num_envs).to(device)
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -323,8 +248,8 @@ if __name__ == "__main__":
 
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
-        b_logprobs = logprobs.reshape(-1, 2)  # Keep the 2 actions dimension
-        b_actions = actions.reshape(-1, 2)     # Keep the 2 actions dimension
+        b_logprobs = logprobs.reshape(-1)
+        b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
@@ -339,8 +264,7 @@ if __name__ == "__main__":
                 mb_inds = b_inds[start:end]
 
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(
-                    b_obs[mb_inds], b_actions[mb_inds]
-                )
+                    b_obs[mb_inds], b_actions.long()[mb_inds])
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
@@ -357,14 +281,9 @@ if __name__ == "__main__":
                         mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
                 # Policy loss
-                mb_advantages = b_advantages[mb_inds].unsqueeze(
-                    1)  # Shape: [batch, 1]
-                # Sum the policy gradients from both actions
-                # Sum across action dimension
-                pg_loss1 = -(mb_advantages * ratio).sum(dim=1)
-                pg_loss2 = -(mb_advantages * torch.clamp(
-                    ratio, 1 - args.clip_coef, 1 + args.clip_coef
-                )).sum(dim=1)  # Sum across action dimension
+                pg_loss1 = -mb_advantages * ratio
+                pg_loss2 = -mb_advantages * \
+                    torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
                 # Value loss

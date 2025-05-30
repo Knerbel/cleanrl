@@ -52,11 +52,12 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         self.steps = 0
         self.max_steps = 128 * 2  # 400
-        self.envs = 1  # 8
+        self.envs = 8
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
         self.level_width = 34 - 2   # Assuming 1-tile border on left and right
         self.num_channels = 3       # RGB channels
+
         # Define the flattened observation space for 3 stacked frames
         self.observation_space = spaces.Box(
             low=0,
@@ -65,16 +66,13 @@ class FireboyAndWatergirlEnv(gym.Env):
             dtype=np.uint8
         )
 
-        # Add position tracking for curiosity reward
-        self.visited_positions = set()
-        self.exploration_bonus = 0.1  # Bonus reward for new positions
-        self.position_grid_size = 4  # Size of grid cells for position discretization
-
         self.cumulative_rewards = np.zeros(self.envs)
         self.video_scale = 16
         self.video_folder = "episode_videos"
         if not os.path.exists(self.video_folder):
             os.makedirs(self.video_folder)
+
+        self.record_video = False  # Set to True to record videos
         self.video_writer = None
 
     def get_action_meanings(self):
@@ -120,9 +118,6 @@ class FireboyAndWatergirlEnv(gym.Env):
                         # level_data[y + 1][x] in ['S', 'G']
                     ):
                 valid_positions.append((x, y))
-
-        if not valid_positions:
-            raise ValueError("No valid floor positions found in the level!")
 
         def manhattan_distance(pos1, pos2):
             return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
@@ -193,18 +188,19 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.cumulative_rewards[current_env] = 0
 
         # Start a new video for the new episode (temporary name)
-        if self.video_writer is not None:
-            self.video_writer.release()
-        video_path = os.path.join(
-            self.video_folder,
-            f"Temp.mp4"
-        )
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        self.video_writer = cv2.VideoWriter(
-            video_path, fourcc, 30.0,
-            (self.level_width * self.video_scale,
-             self.level_height * self.video_scale)
-        )
+        if self.record_video:
+            if self.video_writer is not None:
+                self.video_writer.release()
+            video_path = os.path.join(
+                self.video_folder,
+                f"Temp_{self.games}_{current_env}.mp4"
+            )
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self.video_writer = cv2.VideoWriter(
+                video_path, fourcc, 30.0,
+                (self.level_width * self.video_scale,
+                 self.level_height * self.video_scale)
+            )
 
         self._load_level()
         self.state = self._get_state()
@@ -238,58 +234,45 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Add visit counts to info dict
         info = {
-            "unique_positions": len(self.visited_positions),
+            "unique_positions": -1,
             "stars_collected": sum(star.is_collected for star in self.stars),
             "finished": 1 if self.done else 0,
             "zero_reward": 1 if reward == 0 else 0,
         }
 
-        # Capture frame for video
-        if self.video_writer is not None:
-            frame = cv2.cvtColor(self.state, cv2.COLOR_RGB2BGR)
-            frame = cv2.resize(frame, (self.level_width * self.video_scale, self.level_height * self.video_scale),
-                               interpolation=cv2.INTER_NEAREST)
-            self.video_writer.write(frame)
+        if self.record_video:
+            # Capture frame for video
+            if self.video_writer is not None:
+                frame = cv2.cvtColor(self.state, cv2.COLOR_RGB2BGR)
+                frame = cv2.resize(frame, (self.level_width * self.video_scale, self.level_height * self.video_scale),
+                                   interpolation=cv2.INTER_NEAREST)
+                self.video_writer.write(frame)
 
         # Save and close video at the end of the episode with correct reward
         if self.done:
-            if self.video_writer is not None:
-                final_reward = self.cumulative_rewards[current_env]
-                temp_path = os.path.join(
-                    self.video_folder,
-                    f"Temp.mp4"
-                )
-                video_path = os.path.join(
-                    self.video_folder,
-                    f"GamePlay{self.games}_{self.game.index}_{final_reward:.2f}.mp4"
-                )
-                self.video_writer.release()
-                self.video_writer = None
-                if os.path.exists(temp_path):
-                    os.rename(temp_path, video_path)
-                else:
-                    print(f"Warning: Temp video file not found: {temp_path}")
+            if self.record_video:
+                if self.video_writer is not None:
+                    final_reward = self.cumulative_rewards[current_env]
+                    temp_path = os.path.join(
+                        self.video_folder,
+                        f"Temp_{self.games}_{current_env}.mp4"
+                    )
+                    video_path = os.path.join(
+                        self.video_folder,
+                        f"GamePlay{self.games}_{self.game.index}_{final_reward:.2f}.mp4"
+                    )
+                    self.video_writer.release()
+                    self.video_writer = None
+                    if os.path.exists(temp_path):
+                        os.rename(temp_path, video_path)
+                    else:
+                        print(
+                            f"Warning: Temp video file not found: {temp_path}")
 
         if self.steps >= self.max_steps:
             self.done = True
 
         return self.state, reward, self.done, False, info
-
-    def draw_observation(self, observation):
-        """
-        Draw the observation as an image and save it.
-        """
-        # Ensure the observation is in the correct shape (H, W, C)
-        if len(observation.shape) == 3:
-            rgb_image = observation
-        else:
-            raise ValueError("Observation must have 3 dimensions (H, W, C).")
-        plt.figure(figsize=(8, 6))
-        plt.imshow(rgb_image)
-        plt.axis("off")
-        plt.title(f"Best Environment - Episode ")
-        plt.savefig(f"best_env_episode.png", bbox_inches="tight", pad_inches=0)
-        plt.close()
 
     def render(self, mode="human"):
         """
@@ -361,10 +344,10 @@ class FireboyAndWatergirlEnv(gym.Env):
             'G': [50, 200, 50],
             'f': [255, 0, 0],
             'w': [0, 0, 255],
-            'A': [200, 100, 0],
-            'B': [0, 150, 200],
             'a': [255, 200, 0],
             'b': [0, 200, 255],
+            'A': [200, 100, 0],
+            'B': [0, 150, 200],
             'P': [150, 150, 150],
             'D': [200, 200, 100],
         }
@@ -399,6 +382,10 @@ class FireboyAndWatergirlEnv(gym.Env):
             fb_x -= 1
             if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
                 rgb_image[fb_y, fb_x] = color_mapping['f']
+            else:
+                print(
+                    f"Fireboy position out of bounds: ({fb_x}, {fb_y})")
+
         if self.water_girl:
             wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
             wg_x = int(wg_x)
@@ -407,20 +394,19 @@ class FireboyAndWatergirlEnv(gym.Env):
             if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
                 rgb_image[wg_y, wg_x] = color_mapping['w']
             else:
-                if self.game.index == 1:
-                    print(
-                        f"watergirl position out of bounds: ({fb_x}, {fb_y})")
+                print(
+                    f"watergirl position out of bounds: ({fb_x}, {fb_y})")
 
         # Update the observation history only if the state has changed
 
         # Save image if requested
-        if draw:
-            plt.figure(figsize=(15, 5))
-            plt.imshow(rgb_image)
-            plt.axis('off')
-            plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-            plt.savefig(f"observation.png", bbox_inches='tight', pad_inches=0)
-            plt.close()
+        # if draw:
+        #     plt.figure(figsize=(15, 5))
+        #     plt.imshow(rgb_image)
+        #     plt.axis('off')
+        #     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        #     plt.savefig(f"observation.png", bbox_inches='tight', pad_inches=0)
+        #     plt.close()
 
         return rgb_image
 
@@ -432,19 +418,13 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Check if action is an array-like (for MultiDiscrete) or a single int
         if isinstance(action, (list, tuple, np.ndarray)) and len(action) == 2:
-            # print(action)
             fireboy_action = 3
             watergirl_action = 3
 
             # Map the action to Fireboy and Watergirl actions
-            # if action <= 3:
             fireboy_action = action[0]
-            # elif action >= 4:
             watergirl_action = action[1]
 
-            # Map Fireboy's action
-
-            # print(fireboy_action)
             if fireboy_action == 0:
                 self.fire_boy.moving_left = False
                 self.fire_boy.moving_right = False
@@ -487,7 +467,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.stars, [self.fire_boy, self.water_girl])
 
     def _compute_reward(self):
-        reward = 0
+        reward = -0.01
 
         # Vectorized reward for stars
         stars = np.array(self.stars)
@@ -500,8 +480,6 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         if self._check_done():
             reward *= 10
-
-        # Combine rewards
 
         return reward
 
