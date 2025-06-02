@@ -345,7 +345,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         if self.fire_boy:
             fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
             fb_x = int(fb_x-1)
-            fb_y = int(fb_y-1)
+            fb_y = int(fb_y)
             if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
                 rgb_image[fb_y, fb_x] = color_mapping['f']
             else:
@@ -355,7 +355,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         if self.water_girl:
             wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
             wg_x = int(wg_x-1)
-            wg_y = int(wg_y-1)
+            wg_y = int(wg_y)
             if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x <= rgb_image.shape[1]:
                 rgb_image[wg_y, wg_x] = color_mapping['w']
             else:
@@ -368,7 +368,6 @@ class FireboyAndWatergirlEnv(gym.Env):
         """
         Update the game state based on the discrete action.
         """
-        # Decode the single discrete action into Fireboy and Watergirl actions
 
         # Check if action is an array-like (for MultiDiscrete) or a single int
         if isinstance(action, (list, tuple, np.ndarray)) and len(action) == 2:
@@ -378,7 +377,6 @@ class FireboyAndWatergirlEnv(gym.Env):
             # Map the action to Fireboy and Watergirl actions
             fireboy_action = action[0]
             watergirl_action = action[1]
-
             if fireboy_action == 0:
                 self.fire_boy.moving_left = False
                 self.fire_boy.moving_right = False
@@ -412,6 +410,11 @@ class FireboyAndWatergirlEnv(gym.Env):
                 self.water_girl.moving_left = False
                 self.water_girl.moving_right = False
                 self.water_girl.jumping = True
+        else:
+            print('Invalid action format. Expected a list or tuple of length 2.')
+            print(action)
+
+        fb_old = self.fire_boy.get_position()
 
         self.game.move_player(self.board, self.gates, [
                               self.fire_boy, self.water_girl])
