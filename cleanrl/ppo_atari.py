@@ -28,11 +28,12 @@ import cleanrl.fireboy_and_watergirl_ppo_v3_recR
 import cleanrl.fireboy_and_watergirl_ppo_v3_singleR
 import cleanrl.fireboy_and_watergirl_ppo_v4
 import cleanrl.fireboy_and_watergirl_ppo_v5
+import cleanrl.fireboy_and_watergirl_ppo_v6
 
 
 @dataclass
 class Args:
-    exp_name: str = "snake learning parallel new Model"
+    exp_name: str = "exploration reward"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -50,13 +51,13 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v5'  # "BreakoutNoFrameskip-v4"
+    env_id: str = 'FireboyAndWatergirl-ppo-v6'  # "BreakoutNoFrameskip-v4"
     """the id of the environment"""
     total_timesteps: int = 1000_000
     """total timesteps of the experiments"""
-    learning_rate: float = 2 * 2.5e-4
+    learning_rate: float = 1 * 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 1  # 8
+    num_envs: int = 8
     """the number of parallel game environments"""
     num_steps: int = 128 * 2
     """the number of steps to run in each environment per policy rollout"""
@@ -143,13 +144,13 @@ class Agent(nn.Module):
         self.actor = layer_init(nn.Linear(512, 8), std=0.01)
         self.critic = layer_init(nn.Linear(512, 1), std=1)
 
-    def get_value(self, x):
+    def get_value(self, x: torch.Tensor):
         # x shape: (batch, 4, 23, 34, 3) from env, need to reshape to (batch, 12, 23, 34)
         x = x.permute(0, 1, 4, 2, 3).reshape(
             x.shape[0], -1, x.shape[2], x.shape[3])
         return self.critic(self.network(x / 255.0))
 
-    def get_action_and_value(self, x, action=None):
+    def get_action_and_value(self, x: torch.Tensor, action=None):
         x = x.permute(0, 1, 4, 2, 3).reshape(
             x.shape[0], -1, x.shape[2], x.shape[3])
         hidden = self.network(x / 255.0)
