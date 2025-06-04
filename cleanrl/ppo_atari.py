@@ -14,7 +14,7 @@ import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
-from stable_baselines3.common.atari_wrappers import (  # isort:skip
+from stable_baselines3.common.atari_wrappers import (
     ClipRewardEnv,
     EpisodicLifeEnv,
     FireResetEnv,
@@ -29,11 +29,12 @@ import cleanrl.fireboy_and_watergirl_ppo_v3_singleR
 import cleanrl.fireboy_and_watergirl_ppo_v4
 import cleanrl.fireboy_and_watergirl_ppo_v5
 import cleanrl.fireboy_and_watergirl_ppo_v6
+import cleanrl.fireboy_and_watergirl_ppo_v7
 
 
 @dataclass
 class Args:
-    exp_name: str = "snake learning, remove env wrappers"
+    exp_name: str = "snake learning, curriculum"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -51,7 +52,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v5'  # "BreakoutNoFrameskip-v4"
+    env_id: str = 'FireboyAndWatergirl-ppo-v7'  # "BreakoutNoFrameskip-v4"
     """the id of the environment"""
     total_timesteps: int = 1000_000
     """total timesteps of the experiments"""
@@ -59,7 +60,7 @@ class Args:
     """the learning rate of the optimizer"""
     num_envs: int = 8
     """the number of parallel game environments"""
-    num_steps: int = 128 * 2
+    num_steps: int = 2 * 10
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
@@ -107,10 +108,10 @@ def make_env(env_id, idx, capture_video, run_name):
         # env = EpisodicLifeEnv(env)
         # if "FIRE" in env.unwrapped.get_action_meanings():
         #     env = FireResetEnv(env)
-        env = ClipRewardEnv(env)
-        env = gym.wrappers.ResizeObservation(env, (23, 32))
+        # env = ClipRewardEnv(env)
+        # env = gym.wrappers.ResizeObservation(env, (23, 32))
         # env = gym.wrappers.GrayScaleObservation(env)
-        env = gym.wrappers.FrameStack(env, 4)
+        # env = gym.wrappers.FrameStack(env, 4)
         return env
 
     return thunk
@@ -125,47 +126,66 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
-        # For RGB input, input channels = 3 * 4 = 12 (4 stacked RGB frames)
+        # New network architecture for 4-channel input
         self.network = nn.Sequential(
-            # (12, 23, 34) -> (64, 11, 16)
-            layer_init(nn.Conv2d(12, 64, 3, stride=2)),
+            layer_init(nn.Conv2d(4, 32, kernel_size=3, stride=1, padding=1)),
             nn.ReLU(),
-            # (64, 11, 16) -> (128, 5, 7)
-            layer_init(nn.Conv2d(64, 128, 3, stride=2)),
+            layer_init(nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)),
             nn.ReLU(),
-            # (128, 5, 7) -> (128, 3, 5)
-            layer_init(nn.Conv2d(128, 128, 3, stride=1)),
+            layer_init(nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)),
             nn.ReLU(),
             nn.Flatten(),
-            layer_init(nn.Linear(128 * 3 * 5, 512)),
+        )
+
+        # Calculate CNN output size
+        sample_obs = torch.zeros(1, 4, 23, 32)
+        conv_out_size = self.network(sample_obs).shape[1]
+
+        # Separate heads for better learning
+        self.shared = nn.Sequential(
+            layer_init(nn.Linear(conv_out_size, 512)),
             nn.ReLU(),
         )
-        self.actor = layer_init(nn.Linear(512, 8), std=0.01)
+        # Two actors (one for each character)
+        self.actor1 = layer_init(nn.Linear(512, 4), std=0.01)
+        self.actor2 = layer_init(nn.Linear(512, 4), std=0.01)
         self.critic = layer_init(nn.Linear(512, 1), std=1)
 
     def get_value(self, x: torch.Tensor):
-        # x shape: (batch, 4, 23, 34, 3) from env, need to reshape to (batch, 12, 23, 34)
-        x = x.permute(0, 1, 4, 2, 3).reshape(
-            x.shape[0], -1, x.shape[2], x.shape[3])
-        return self.critic(self.network(x / 255.0))
+        # x shape: (batch, height, width, channels)
+        # Convert to (batch, channels, height, width)
+        x = x.permute(0, 3, 1, 2)
+        features = self.network(x)
+        hidden = self.shared(features)
+        return self.critic(hidden)
 
     def get_action_and_value(self, x: torch.Tensor, action=None):
-        x = x.permute(0, 1, 4, 2, 3).reshape(
-            x.shape[0], -1, x.shape[2], x.shape[3])
-        hidden = self.network(x / 255.0)
-        logits = self.actor(hidden)
-        logits1, logits2 = logits.split(4, dim=-1)
+        # x shape: (batch, height, width, channels)
+        # Convert to (batch, channels, height, width)
+        x = x.permute(0, 3, 1, 2)
+        features = self.network(x)
+        hidden = self.shared(features)
+
+        # Get logits for both actors
+        logits1 = self.actor1(hidden)
+        logits2 = self.actor2(hidden)
+
+        # Create distributions
         dist1 = Categorical(logits=logits1)
         dist2 = Categorical(logits=logits2)
+
+        # Sample or use provided actions
         if action is None:
             action1 = dist1.sample()
             action2 = dist2.sample()
-            action = torch.stack([action1, action2], dim=-1)
+            action = torch.stack([action1, action2], dim=1)
         else:
-            action1, action2 = action[..., 0], action[..., 1]
-        logprob = dist1.log_prob(
-            action[..., 0]) + dist2.log_prob(action[..., 1])
+            action1, action2 = action[:, 0], action[:, 1]
+
+        # Calculate log probabilities and entropy
+        logprob = dist1.log_prob(action1) + dist2.log_prob(action2)
         entropy = dist1.entropy() + dist2.entropy()
+
         return action, logprob, entropy, self.critic(hidden)
 
 
