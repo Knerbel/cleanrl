@@ -33,7 +33,7 @@ import cleanrl.fireboy_and_watergirl_ppo_v6
 
 @dataclass
 class Args:
-    exp_name: str = "exploration reward"
+    exp_name: str = "snake learning, remove env wrappers"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -51,7 +51,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v6'  # "BreakoutNoFrameskip-v4"
+    env_id: str = 'FireboyAndWatergirl-ppo-v5'  # "BreakoutNoFrameskip-v4"
     """the id of the environment"""
     total_timesteps: int = 1000_000
     """total timesteps of the experiments"""

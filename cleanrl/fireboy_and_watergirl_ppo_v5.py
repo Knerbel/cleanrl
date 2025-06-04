@@ -1,13 +1,10 @@
 import random
-from typing import Set
 import gymnasium as gym
 from gymnasium import spaces
-from matplotlib import pyplot as plt
 import numpy as np
 from gymnasium.envs.registration import register
 import cv2  # Add this import at the top with other imports
 import os
-import time
 
 from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import FireBoy, WaterGirl
@@ -15,6 +12,8 @@ from fireboy_and_watergirl.doors import FireDoor, WaterDoor
 from fireboy_and_watergirl.game import Game
 from fireboy_and_watergirl.gates import Gates
 from fireboy_and_watergirl.stars import Stars
+
+# v5 uses snake learning
 
 
 class FireboyAndWatergirlEnv(gym.Env):
@@ -72,7 +71,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         if not os.path.exists(self.video_folder):
             os.makedirs(self.video_folder)
 
-        self.record_video = False  # Set to True to record videos
+        self.record_video = True  # Set to True to record videos
         self.video_writer = None
 
     def get_action_meanings(self):
@@ -107,16 +106,16 @@ class FireboyAndWatergirlEnv(gym.Env):
             if (level_data[y][x] == ' ' and
                     y < len(level_data) - 1
                     # and
-                        # level_data[y + 1][x] in ['S', 'G']
-                    ):
+                # level_data[y + 1][x] in ['S', 'G']
+                ):
                 valid_positions.append((x, y))
         y = 15
         for x in range(len(level_data[0])):
             if (level_data[y][x] == ' ' and
                     y < len(level_data) - 1
                     # and
-                        # level_data[y + 1][x] in ['S', 'G']
-                    ):
+                # level_data[y + 1][x] in ['S', 'G']
+                ):
                 valid_positions.append((x, y))
 
         def manhattan_distance(pos1, pos2):
@@ -188,7 +187,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.cumulative_rewards[current_env] = 0
 
         # Start a new video for the new episode (temporary name)
-        if self.record_video:
+        if self.record_video and self.games % 10 == 0:
             if self.video_writer is not None:
                 self.video_writer.release()
             video_path = os.path.join(
@@ -240,7 +239,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             "zero_reward": 1 if reward == 0 else 0,
         }
 
-        if self.record_video:
+        if self.record_video and self.games % 10 == 0:
             # Capture frame for video
             if self.video_writer is not None:
                 frame = cv2.cvtColor(self.state, cv2.COLOR_RGB2BGR)
@@ -250,7 +249,7 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Save and close video at the end of the episode with correct reward
         if self.done:
-            if self.record_video:
+            if self.record_video and self.games % 10 == 0:
                 if self.video_writer is not None:
                     final_reward = self.cumulative_rewards[current_env]
                     temp_path = os.path.join(
@@ -327,7 +326,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.video_writer.release()
             self.video_writer = None
 
-    def _get_state(self, draw=False):
+    def _get_state(self):
         level_data = self.board.get_level_data()
         # Ignore the outer border (typically 1 tile) since it's always constant
         border_size = 1  # Assuming outer wall is 1 tile thick
@@ -377,9 +376,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Draw dynamic player positions
         if self.fire_boy:
             fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
-            fb_x = int(fb_x)
+            fb_x = int(fb_x-1)
             fb_y = int(fb_y)
-            fb_x -= 1
             if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
                 rgb_image[fb_y, fb_x] = color_mapping['f']
             else:
@@ -388,14 +386,13 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         if self.water_girl:
             wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
-            wg_x = int(wg_x)
+            wg_x = int(wg_x-1)
             wg_y = int(wg_y)
-            wg_x -= 1
             if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
                 rgb_image[wg_y, wg_x] = color_mapping['w']
             else:
                 print(
-                    f"watergirl position out of bounds: ({fb_x}, {fb_y})")
+                    f"watergirl position out of bounds: ({wg_x}, {wg_y})")
 
         # Update the observation history only if the state has changed
 
@@ -458,6 +455,9 @@ class FireboyAndWatergirlEnv(gym.Env):
                 self.water_girl.moving_left = False
                 self.water_girl.moving_right = False
                 self.water_girl.jumping = True
+        else:
+            print('Invalid action format. Expected a list or tuple of length 2.')
+            print(action)
 
         self.game.move_player(self.board, self.gates, [
                               self.fire_boy, self.water_girl])
@@ -467,7 +467,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.stars, [self.fire_boy, self.water_girl])
 
     def _compute_reward(self):
-        reward = -0.01
+        reward = -0.01  # Small negative reward for each step
 
         # Vectorized reward for stars
         stars = np.array(self.stars)
@@ -475,11 +475,11 @@ class FireboyAndWatergirlEnv(gym.Env):
         reward_given = np.array([star.reward_given for star in stars])
         for i, star in enumerate(stars):
             if is_collected[i] and not reward_given[i]:
-                reward += 10
+                reward += 20
                 star.reward_given = True
 
-        if self._check_done():
-            reward *= 10
+        # if self._check_done():
+        #     reward *= 10
 
         return reward
 

@@ -155,7 +155,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.cumulative_rewards[current_env] = 0
 
         # Start a new video for the new episode (temporary name)
-        if self.record_video:
+        if self.record_video and self.games % 10 == 0:
             if self.video_writer is not None:
                 self.video_writer.release()
             video_path = os.path.join(
@@ -207,7 +207,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             "zero_reward": 1 if reward == 0 else 0,
         }
 
-        if self.record_video:
+        if self.record_video and self.games % 10 == 0:
             # Capture frame for video
             if self.video_writer is not None:
                 frame = cv2.cvtColor(self.state, cv2.COLOR_RGB2BGR)
@@ -217,7 +217,7 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Save and close video at the end of the episode with correct reward
         if self.done:
-            if self.record_video:
+            if self.record_video and self.games % 10 == 0:
                 if self.video_writer is not None:
                     final_reward = self.cumulative_rewards[current_env]
                     temp_path = os.path.join(
@@ -451,7 +451,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         exploration_reward = (new_fb_positions + new_wg_positions) * 20
 
         # Add exploration reward
-        reward += exploration_reward
+        # reward += exploration_reward
 
         # Reward for collecting stars
         stars = np.array(self.stars)
@@ -459,7 +459,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         reward_given = np.array([star.reward_given for star in stars])
         for i, star in enumerate(stars):
             if is_collected[i] and not reward_given[i]:
-                reward += 500
+                reward += 20
                 star.reward_given = True
 
         return reward
