@@ -45,10 +45,13 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.games = 0
 
         self.MAX_DISTANCE = 2
+        self.episode_history = []  # Track success/failure of recent episodes
+        self.curriculum_window = 20
+
         self._load_level()
 
         self.steps = 0
-        self.max_steps = self.MAX_DISTANCE * 10
+        self.max_steps = 100  # self.MAX_DISTANCE * 10
         self.envs = 8
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
@@ -104,18 +107,18 @@ class FireboyAndWatergirlEnv(gym.Env):
         y = 21
         for x in range(len(level_data[0])):
             if (level_data[y][x] == ' ' and
-                y < len(level_data) - 1
-                # and
-                    # level_data[y + 1][x] in ['S', 'G']
-                ):
+                    y < len(level_data) - 1
+                    # and
+                        # level_data[y + 1][x] in ['S', 'G']
+                    ):
                 valid_positions.append((x, y))
         y = 15
         for x in range(len(level_data[0])):
             if (level_data[y][x] == ' ' and
-                y < len(level_data) - 1
-                # and
-                    # level_data[y + 1][x] in ['S', 'G']
-                ):
+                    y < len(level_data) - 1
+                    # and
+                        # level_data[y + 1][x] in ['S', 'G']
+                    ):
                 valid_positions.append((x, y))
 
         def manhattan_distance(pos1, pos2):
@@ -254,6 +257,27 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Check if the game is done
         self.done = self._check_done()
 
+        # Move episode tracking logic here
+        if self.done or self.steps >= self.max_steps:
+            # Only success if stars collected before timeout
+            # Keep only last N episodes
+            if len(self.episode_history) > self.curriculum_window:
+                self.episode_history.pop(0)
+
+            # Check if we should increase difficulty
+            if len(self.episode_history) > self.curriculum_window:
+                success_rate = sum(self.episode_history) / \
+                    len(self.episode_history)
+                print(
+                    f"Success rate: {success_rate:.2f}")
+
+                if success_rate > 0.4:  # If success rate > 50%
+                    self.MAX_DISTANCE = min(self.MAX_DISTANCE + 1, 8)
+                    print(
+                        f"Increasing MAX_DISTANCE to {self.MAX_DISTANCE} for game {self.game.index}")
+                    self.episode_history.clear()
+                    # self.max_steps = self.MAX_DISTANCE * 10
+
         self.steps += 1
 
         # Add visit counts to info dict
@@ -292,8 +316,11 @@ class FireboyAndWatergirlEnv(gym.Env):
                     else:
                         print(
                             f"Warning: Temp video file not found: {temp_path}")
+        if self._check_done():
+            self.episode_history.append(1)
 
         if self.steps >= self.max_steps:
+            self.episode_history.append(0)
             self.done = True
 
         return self.state, reward, self.done, False, info
@@ -475,8 +502,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         return reward
 
     def _check_done(self):
-        # Vectorized check if all stars are collected
-        return all(star.is_collected for star in self.stars)
+        is_done = all(star.is_collected for star in self.stars)
+        return is_done
 
 
 # Environment with exploration reward
