@@ -16,7 +16,7 @@ from fireboy_and_watergirl.game import Game
 from fireboy_and_watergirl.gates import Gates
 from fireboy_and_watergirl.stars import Stars
 
-# v6 uses exploration rewards
+# v9 uses exploration rewards
 
 
 class FireboyAndWatergirlEnv(gym.Env):
@@ -308,18 +308,18 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Fill the RGB image based on the inner level data
         color_mapping = {
             ' ': [255, 255, 255],
-            'S': [50, 50, 50],
-            'L': [255, 50, 0],
-            'W': [0, 100, 255],
-            'G': [50, 200, 50],
-            'f': [255, 0, 0],
-            'w': [0, 0, 255],
-            'a': [255, 200, 0],
-            'b': [0, 200, 255],
-            'A': [200, 100, 0],
-            'B': [0, 150, 200],
-            'P': [150, 150, 150],
-            'D': [200, 200, 100],
+            'S': [255, 255, 255],
+            'L': [255, 255, 255],
+            'W': [255, 255, 255],
+            'G': [255, 255, 255],
+            'f': [255, 255, 255],
+            'w': [255, 255, 255],
+            'a': [255, 255, 255],
+            'b': [255, 255, 255],
+            'A': [255, 255, 255],
+            'B': [255, 255, 255],
+            'P': [255, 255, 255],
+            'D': [255, 255, 255],
         }
 
         # Vectorized tile drawing
@@ -486,6 +486,6 @@ class FireboyAndWatergirlEnv(gym.Env):
 
 
 register(
-    id="FireboyAndWatergirl-ppo-v9",
-    entry_point="cleanrl.v9.fireboy_and_watergirl_ppo_v9:FireboyAndWatergirlEnv",
+    id="FireboyAndWatergirl-ppo-v9-wo-observation-space",
+    entry_point="cleanrl.v9.fireboy_and_watergirl_ppo_v9_wo_observation_space:FireboyAndWatergirlEnv",
 )

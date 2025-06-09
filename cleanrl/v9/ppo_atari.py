@@ -26,11 +26,12 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 # import cleanrl.fireboy_and_watergirl_ppo
 import cleanrl.v9.fireboy_and_watergirl_ppo_random_baseline
 import cleanrl.v9.fireboy_and_watergirl_ppo_v9
+import cleanrl.v9.fireboy_and_watergirl_ppo_v9_wo_observation_space
 
 
 @dataclass
 class Args:
-    exp_name: str = "avoid obstacles"
+    exp_name: str = "exploration - spawn top level- wo os"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -48,7 +49,8 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v9'  # "BreakoutNoFrameskip-v4"
+    # "BreakoutNoFrameskip-v4"
+    env_id: str = 'FireboyAndWatergirl-ppo-v9-wo-observation-space'
     """the id of the environment"""
     total_timesteps: int = 1000_000
     """total timesteps of the experiments"""
