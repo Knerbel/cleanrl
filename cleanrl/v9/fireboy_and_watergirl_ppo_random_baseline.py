@@ -7,7 +7,6 @@ import numpy as np
 from gymnasium.envs.registration import register
 import cv2  # Add this import at the top with other imports
 import os
-import time
 
 from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import FireBoy, WaterGirl
@@ -16,7 +15,7 @@ from fireboy_and_watergirl.game import Game
 from fireboy_and_watergirl.gates import Gates
 from fireboy_and_watergirl.stars import Stars
 
-# v6 uses exploration rewards
+# v9 avoid obstacles
 
 
 class FireboyAndWatergirlEnv(gym.Env):
@@ -31,7 +30,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         # 4 actions for each character
         self.action_space = spaces.MultiDiscrete([4, 4])
         # Initialize game components
-        self.level = 'level_exploration'
+        self.level = 'level_obstacles'
         self.episode_results = []  # Track success/failure of episodes
 
         self.game = Game()  # Instantiate the Game class
@@ -377,6 +376,10 @@ class FireboyAndWatergirlEnv(gym.Env):
             # Map the action to Fireboy and Watergirl actions
             fireboy_action = action[0]
             watergirl_action = action[1]
+
+            fireboy_action = random.randint(0, 3)
+            watergirl_action = random.randint(0, 3)
+
             if fireboy_action == 0:
                 self.fire_boy.moving_left = False
                 self.fire_boy.moving_right = False
@@ -424,43 +427,57 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.stars, [self.fire_boy, self.water_girl])
 
     def _compute_reward(self):
-        reward = -0.01  # Small negative reward for each step
+        reward = 0
 
-        # Track previous number of visited positions
-        prev_fb_positions = len(self.fb_visited_positions)
-        prev_wg_positions = len(self.wg_visited_positions)
+        # Reward for moving right
+        fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
+        fb_x = int(fb_x-1)
+        wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
+        wg_x = int(wg_x-1)
 
-        # Update visited positions (this happens in step())
-        if self.fire_boy:
-            fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
-            fb_x, fb_y = int(fb_x-1), int(fb_y-1)
-            if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
-                if fb_y == 9 or fb_y == 15 or fb_y == 21:
-                    self.fb_visited_positions.add((fb_x, fb_y))
+        # Store previous x positions if not exists
+        if not hasattr(self, '_prev_fb_x'):
+            self._prev_fb_x = fb_x
+            self._prev_wg_x = wg_x
 
-        if self.water_girl:
-            wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
-            wg_x, wg_y = int(wg_x-1), int(wg_y-1)
-            if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
-                if wg_y == 9 or wg_y == 15 or wg_y == 21:
-                    self.wg_visited_positions.add((wg_x, wg_y))
+        # Reward for moving right (positive x direction)
+        fb_movement = fb_x - self._prev_fb_x
+        wg_movement = wg_x - self._prev_wg_x
+        reward += fb_movement * 5  # 5 points per tile moved right
+        reward += wg_movement * 5
 
-        # Calculate exploration reward
-        new_fb_positions = len(self.fb_visited_positions) - prev_fb_positions
-        new_wg_positions = len(self.wg_visited_positions) - prev_wg_positions
-        # exploration_reward = (new_fb_positions + new_wg_positions) * 5
+        # Update previous positions
+        self._prev_fb_x = fb_x
+        self._prev_wg_x = wg_x
 
-        # Add exploration reward
-        # reward += exploration_reward
+        # Punish for hazards
+        level_data = self.board.get_level_data()
+        fb_tile = level_data[int(fb_y)][int(fb_x)]
+        wg_tile = level_data[int(wg_y)][int(wg_x)]
 
-        # Reward for collecting stars
-        stars = np.array(self.stars)
-        is_collected = np.array([star.is_collected for star in stars])
-        reward_given = np.array([star.reward_given for star in stars])
-        for i, star in enumerate(stars):
-            if is_collected[i] and not reward_given[i]:
-                reward += 5
+        # Punish Fireboy for water and goo
+        if fb_tile in ['W', 'G']:  # W for water, G for goo
+            reward -= 10
+            # self.done = True  # End episode on death
+
+        # Punish Watergirl for fire and goo
+        if wg_tile in ['F', 'G']:  # F for fire, G for goo
+            reward -= 10
+            # self.done = True  # End episode on death
+
+        if fb_x >= self.level_width - 1 and wg_x >= self.level_width - 1:
+            reward += 200  # Large bonus for reaching the end
+            self.done = True
+
+        # Keep star collection rewards
+        for star in self.stars:
+            if star.is_collected and not star.reward_given:
+                # reward += 50
                 star.reward_given = True
+
+        # # Completion reward
+        # if self._check_done():
+        #     reward += 100
 
         return reward
 
@@ -470,6 +487,6 @@ class FireboyAndWatergirlEnv(gym.Env):
 
 
 register(
-    id="FireboyAndWatergirl-ppo-v6",
-    entry_point="cleanrl.fireboy_and_watergirl_ppo_v6:FireboyAndWatergirlEnv",
+    id="FireboyAndWatergirl-ppo-random-baseline",
+    entry_point="cleanrl.v9.fireboy_and_watergirl_ppo_random_baseline:FireboyAndWatergirlEnv",
 )
