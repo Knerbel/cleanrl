@@ -365,7 +365,7 @@ class Game:
             # otherwise, the gate will close
             gate.try_open_gate()
 
-    def check_for_at_door(self, door: FireDoor | WaterDoor, player: Character):
+    def check_for_at_door(self, door: FireDoor | WaterDoor, players: list[Character]):
         """
         Check to see if a player is at the door.
 
@@ -376,10 +376,15 @@ class Game:
                 A player object containing information on its location
         """
         # check to see if the player is at the door
-        door_collision = self.collision_test(player.rect, [door.get_door()])
-        # if the collision list is greater than zero, player is at door
-        if door_collision:
-            door.player_at_door = True
+        for player in players:
+            if player.rect.colliderect(door._rect):
+                if player.get_type() == door._player:
+                    door.player_at_door = True
+            # door_collision = self.collision_test(
+            #     player.rect, [door.get_door()])
+            # # if the collision list is greater than zero, player is at door
+            # if door_collision:
+            #     door.player_at_door = True
         # otherwise, player is not at door
         # else:
             # door.player_at_door = False

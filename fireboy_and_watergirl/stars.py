@@ -49,20 +49,20 @@ class Stars:
         """
         return self.postion
 
-    def check_for_collection(self, players):
-        """
-        Check if any player has collected a star.
+    # def check_for_collection(self, players):
+    #     """
+    #     Check if any player has collected a star.
 
-        Args:
-            players (list of player objects): List of player objects (e.g., FireBoy, WaterGirl).
-        """
-        for i, star in enumerate(self._stars):
-            if i in self.is_collected:
-                continue  # Skip already collected stars
-            for player in players:
-                if star.colliderect(player.rect):
-                    self.is_collected = True
-                    # Mark star as collected
+    #     Args:
+    #         players (list of player objects): List of player objects (e.g., FireBoy, WaterGirl).
+    #     """
+    #     for i, star in enumerate(self._stars):
+    #         if i in self.is_collected:
+    #             continue  # Skip already collected stars
+    #         for player in players:
+    #             if star.colliderect(player.rect):
+    #                 self.is_collected = True
+    #                 # Mark star as collected
 
     def collect_star(self):
         """

@@ -1,29 +1,38 @@
+import pygame
 from fireboy_and_watergirl.rect import Rect
 
 
 class Doors:
     def __init__(self):
         # Set doors' initial height and state
-        self._player = None
+        # self.postion = postion
         self.player_at_door = False
-        self._height_raised = 0
-        self._door_open = False
+        # self._player = player
 
-        # Initialize door position and dimensions
-        self.position = (0, 0)
         self.door_width = 16
         self.door_height = 32
-        self.reward_given = False
-        self._rect = None
+        self.load_images()
         self.make_rects()
+        self.reward_given = False
+
+    def load_images(self):
+        """
+        Load the star image.
+        """
+        # Load star image and make transparent
+        self.star_image = pygame.image.load(
+            './fireboy_and_watergirl/data/door_images/door_frame.png'
+        )
 
     def make_rects(self):
         """
         Create a custom Rect for the door.
         """
-        x_cord = self.position[0]
-        y_cord = self.position[1]
-        self._rect = Rect(x_cord, y_cord, self.door_width, self.door_height)
+        self._rect = (
+            pygame.Rect(self.position[0], self.position[1],
+                        self.star_image.get_width(),
+                        self.star_image.get_height())
+        )
 
     def get_door(self):
         """
@@ -77,27 +86,28 @@ class Doors:
 
 class FireDoor(Doors):
     def __init__(self, position):
-        CHUNK_SIZE = 16
+        # CHUNK_SIZE = 16
         # Set door location as input door location
         self.position = position
         # Set door background location as the same as the door
-        self.background_location = position
+        # self.background_location = position        self.load_images()
+
         # Since the frame is larger than the door, it has to be offset
-        self.frame_location = (
-            position[0] - CHUNK_SIZE, position[1] - 2 * CHUNK_SIZE)
+        # self.frame_location = (
+        #     position[0] - CHUNK_SIZE, position[1] - 2 * CHUNK_SIZE)
         self._player = "fire"
         super().__init__()
 
 
 class WaterDoor(Doors):
     def __init__(self, position):
-        CHUNK_SIZE = 16
+        # CHUNK_SIZE = 16
         # Set door location as input door location
         self.position = position
         # Set door background location as the same as the door
-        self.background_location = position
+        # self.background_location = position
         # Since the frame is larger than the door, it has to be offset
-        self.frame_location = (
-            position[0] - CHUNK_SIZE, position[1] - 2 * CHUNK_SIZE)
+        # self.frame_location = (
+        #     position[0] - CHUNK_SIZE, position[1] - 2 * CHUNK_SIZE)
         self._player = "water"
         super().__init__()

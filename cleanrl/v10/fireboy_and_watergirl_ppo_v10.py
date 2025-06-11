@@ -49,7 +49,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self._load_level()
 
         self.steps = 0
-        self.max_steps = 128 * 4  # 400
+        self.max_steps = 128 * 8  # 400
         self.envs = 8
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
@@ -190,10 +190,10 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Add visit counts to info dict
         info = {
-            "unique_positions": -1,
+            "unique_positions": len(self.fb_visited_positions) + len(self.wg_visited_positions),
             "stars_collected": sum(star.is_collected for star in self.stars),
             "finished": 1 if self.done else 0,
-            "zero_reward": 1 if reward == 0 else 0,
+            "zero_reward": 1 if reward <= 0 else 0,
         }
 
         if self.record_video and self.games % 10 == 0:
@@ -335,6 +335,13 @@ class FireboyAndWatergirlEnv(gym.Env):
                 else:
                     rgb_image[s_y, s_x] = color_mapping[' ']
 
+        # Draw doors
+        for door in self.doors:
+            d_x, d_y = np.array(door.get_position()) // 16 - border_size
+            if 0 <= d_y < rgb_image.shape[0] and 0 <= d_x < rgb_image.shape[1]:
+                rgb_image[s_y, s_x] = color_mapping['A' if star._player ==
+                                                    "fire" else 'B']
+
         # Draw dynamic player positions
         if self.fire_boy:
             fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
@@ -406,14 +413,15 @@ class FireboyAndWatergirlEnv(gym.Env):
             print('Invalid action format. Expected a list or tuple of length 2.')
             print(action)
 
-        fb_old = self.fire_boy.get_position()
-
         self.game.move_player(self.board, self.gates, [
                               self.fire_boy, self.water_girl])
-        self.game.check_for_gate_press(
-            self.gates, [self.fire_boy, self.water_girl])
+        # self.game.check_for_gate_press(
+        #     self.gates, [self.fire_boy, self.water_girl])
         self.game.check_for_star_collected(
             self.stars, [self.fire_boy, self.water_girl])
+        self.game.check_for_at_door(
+            self.doors, []
+        )
 
     def _compute_reward(self):
         reward = -0.01  # Small negative reward for each step
@@ -452,6 +460,16 @@ class FireboyAndWatergirlEnv(gym.Env):
             if is_collected[i] and not reward_given[i]:
                 reward += 500
                 star.reward_given = True
+
+                # Reward for collecting stars
+        doors = np.array(self.doors)
+        player_at_door = np.array([door.player_at_door for door in doors])
+        reward_given = np.array([door.reward_given for door in doors])
+        for i, door in enumerate(doors):
+            if player_at_door[i] and not reward_given[i]:
+                reward += 2000
+                print('PLAYER AT DOOR!')
+                door.reward_given = True
 
         return reward
 

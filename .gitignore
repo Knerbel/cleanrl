@@ -1,6 +1,7 @@
 slurm
 .aim
 runs
+# runs_saved
 balance_bot.xml
 cleanrl/ppo_continuous_action_isaacgym/isaacgym/examples
 cleanrl/ppo_continuous_action_isaacgym/isaacgym/isaacgym
@@ -16,7 +17,7 @@ docker_cache
 rl-video-*.mp4
 rl-video-*.json
 cleanrl_utils/charts_episode_reward
-tutorials
+tutorial
 .DS_Store
 *.tfevents.*
 wandb
@@ -129,3 +130,5 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+/episode_videos
