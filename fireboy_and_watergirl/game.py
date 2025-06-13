@@ -2,8 +2,8 @@
 from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import Character
 from fireboy_and_watergirl.doors import FireDoor, WaterDoor
-from fireboy_and_watergirl.rect import Rect
 from fireboy_and_watergirl.stars import Stars
+from pygame import Rect
 
 
 class Game:
@@ -365,7 +365,7 @@ class Game:
             # otherwise, the gate will close
             gate.try_open_gate()
 
-    def check_for_at_door(self, door: FireDoor | WaterDoor, players: list[Character]):
+    def check_for_at_door(self, doors: FireDoor | WaterDoor, players: list[Character]):
         """
         Check to see if a player is at the door.
 
@@ -377,19 +377,10 @@ class Game:
         """
         # check to see if the player is at the door
         for player in players:
-            if player.rect.colliderect(door._rect):
-                if player.get_type() == door._player:
-                    door.player_at_door = True
-            # door_collision = self.collision_test(
-            #     player.rect, [door.get_door()])
-            # # if the collision list is greater than zero, player is at door
-            # if door_collision:
-            #     door.player_at_door = True
-        # otherwise, player is not at door
-        # else:
-            # door.player_at_door = False
-        # attempt to raise door. If nobody is at door, try to close the door
-        # door.try_raise_door()
+            for door in doors:
+                if player.rect.colliderect(door._rect):
+                    if player.get_type() == door._player:
+                        door.player_at_door = True
 
     def check_for_door_open(self, door: FireDoor | WaterDoor, player: Character):
         """

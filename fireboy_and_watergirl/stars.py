@@ -23,15 +23,13 @@ class Stars:
         Load the star image.
         """
         # Load star image and make transparent
-        if self._player == "fire":
-            self.star_image = pygame.image.load(
-                './fireboy_and_watergirl/data/board_textures/fireboy_star.png'
-            )
-        if self._player == "water":
-            self.star_image = pygame.image.load(
-                './fireboy_and_watergirl/data/board_textures/watergirl_star.png'
-            )
-        self.star_image.set_colorkey((255, 0, 255))
+        image_paths = {
+            "fire": './fireboy_and_watergirl/data/board_textures/fireboy_star.png',
+            "water": './fireboy_and_watergirl/data/board_textures/watergirl_star.png'
+        }
+        self.star_image = pygame.image.load(
+            image_paths.get(self._player, image_paths["fire"]))
+        # self.star_image.set_colorkey((255, 0, 255))
 
     def make_rects(self):
         """

@@ -8,7 +8,7 @@ class Gates:
         self.gate_position = gate_position
         self.plate_position = plate_position
         self.plate_is_pressed = False
-        self._gate_is_open = False
+        self._is_open = False
 
         self.load_images()
         self.make_rects()
@@ -45,29 +45,29 @@ class Gates:
                             self.plate_image.get_width(),
                             self.plate_image.get_height()))
 
-    def try_open_gate(self):
-        """
-        If person is on button, open gate, otherwise, keep gate closed
-        """
-        CHUNK_SIZE = 16
-        gate_x = self.gate_position[0]
-        gate_y = self.gate_position[1]
-        # if plate is pressed and gate is not open
-        if self.plate_is_pressed and not self._gate_is_open:
-            # set new gate location
-            self.gate_position = (gate_x, gate_y - 2 * CHUNK_SIZE)
-            # move gate
-            self._gate.y -= 2 * CHUNK_SIZE
-            # set gate as being open
-            self._gate_is_open = True
-        # if plate is not being pressed and gate is open
-        if not self.plate_is_pressed and self._gate_is_open:
-            # set new gate location
-            self.gate_position = (gate_x, gate_y + 2 * CHUNK_SIZE)
-            # move gate
-            self._gate.y += 2 * CHUNK_SIZE
-            # set gate as being closed
-            self._gate_is_open = False
+    # def try_open_gate(self):
+    #     """
+    #     If person is on button, open gate, otherwise, keep gate closed
+    #     """
+    #     CHUNK_SIZE = 16
+    #     gate_x = self.gate_position[0]
+    #     gate_y = self.gate_position[1]
+    #     # if plate is pressed and gate is not open
+    #     if self.plate_is_pressed and not self._gate_is_open:
+    #         # set new gate location
+    #         self.gate_position = (gate_x, gate_y - 2 * CHUNK_SIZE)
+    #         # move gate
+    #         self._gate.y -= 2 * CHUNK_SIZE
+    #         # set gate as being open
+    #         self._gate_is_open = True
+    #     # if plate is not being pressed and gate is open
+    #     if not self.plate_is_pressed and self._gate_is_open:
+    #         # set new gate location
+    #         self.gate_position = (gate_x, gate_y + 2 * CHUNK_SIZE)
+    #         # move gate
+    #         self._gate.y += 2 * CHUNK_SIZE
+    #         # set gate as being closed
+    #         self._gate_is_open = False
 
     def get_solid_blocks(self):
         """

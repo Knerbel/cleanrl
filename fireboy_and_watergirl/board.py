@@ -1,4 +1,5 @@
-from fireboy_and_watergirl.rect import Rect
+# from fireboy_and_watergirl.rect import Rect
+from pygame import Rect
 
 
 class Board:

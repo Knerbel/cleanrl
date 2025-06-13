@@ -1,4 +1,4 @@
-from fireboy_and_watergirl.rect import Rect
+from pygame import Rect
 
 
 class Character:
@@ -75,20 +75,20 @@ class Character:
 
 
 class FireBoy(Character):
-    def __init__(self, location):
+    def __init__(self, position):
         # self.image = pygame.image.load(
         #     './fireboy_and_watergirl/data/player_images/fireboy.png')
         # self.side_image = pygame.image.load(
         #     './fireboy_and_watergirl/data/player_images/fireboy-side.png')
         self._type = "fire"
-        super().__init__(location)
+        super().__init__(position)
 
 
 class WaterGirl(Character):
-    def __init__(self, location):
+    def __init__(self, position):
         # self.image = pygame.image.load(
         #     './fireboy_and_watergirl/data/player_images/watergirl.png')
         # self.side_image = pygame.image.load(
         #     './fireboy_and_watergirl/data/player_images/watergirl-side.png')
         self._type = "water"
-        super().__init__(location)
+        super().__init__(position)

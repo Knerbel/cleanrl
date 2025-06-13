@@ -49,7 +49,6 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    # "BreakoutNoFrameskip-v4"
     env_id: str = 'FireboyAndWatergirl-ppo-v9-wo-observation-space'
     """the id of the environment"""
     total_timesteps: int = 1000_000
@@ -143,7 +142,6 @@ class Agent(nn.Module):
         self.critic = layer_init(nn.Linear(512, 1), std=1)
 
     def get_value(self, x: torch.Tensor):
-        # x shape: (batch, 4, 23, 34, 3) from env, need to reshape to (batch, 12, 23, 34)
         x = x.permute(0, 1, 4, 2, 3).reshape(
             x.shape[0], -1, x.shape[2], x.shape[3])
         return self.critic(self.network(x / 255.0))

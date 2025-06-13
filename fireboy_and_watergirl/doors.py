@@ -1,5 +1,5 @@
+from pygame import Rect
 import pygame
-from fireboy_and_watergirl.rect import Rect
 
 
 class Doors:
@@ -29,9 +29,9 @@ class Doors:
         Create a custom Rect for the door.
         """
         self._rect = (
-            pygame.Rect(self.position[0], self.position[1],
-                        self.star_image.get_width(),
-                        self.star_image.get_height())
+            Rect(self.position[0], self.position[1],
+                 self.star_image.get_width(),
+                 self.star_image.get_height())
         )
 
     def get_door(self):

@@ -1,4 +1,3 @@
-import random
 from typing import Set
 import gymnasium as gym
 from gymnasium import spaces
@@ -7,7 +6,6 @@ import numpy as np
 from gymnasium.envs.registration import register
 import cv2  # Add this import at the top with other imports
 import os
-import time
 
 from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import FireBoy, WaterGirl
@@ -59,8 +57,9 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.fb_visited_positions = set()  # Add this line to store visited positions
         self.wg_visited_positions = set()  # Add this line to store visited positions
 
-        self.fb_last_position = None
-        self.wg_last_position = None
+        self.times_in_water = 0
+        self.times_in_fire = 0
+        self.times_in_goo = 0
 
         # Define the flattened observation space for 3 stacked frames
         self.observation_space = spaces.Box(
@@ -100,8 +99,6 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.gates: list[Gates] = []
         self.doors: list[FireDoor | WaterDoor] = []
         self.stars: list[Stars] = []
-        self.fire_boy: FireBoy = None
-        self.water_girl: WaterGirl = None
 
         # Parse the level data to dynamically set up components
         for y, row in enumerate(level_data):
@@ -163,6 +160,10 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.done = False
         self.steps = 0
 
+        self.times_in_water = 0
+        self.times_in_fire = 0
+        self.times_in_goo = 0
+
         self.games += 1
 
         return self.state, {}
@@ -194,6 +195,9 @@ class FireboyAndWatergirlEnv(gym.Env):
             "stars_collected": sum(star.is_collected for star in self.stars),
             "finished": 1 if self.done else 0,
             "zero_reward": 1 if reward <= 0 else 0,
+            "times_in_water": self.times_in_water,
+            "times_in_fire": self.times_in_fire,
+            "times_in_goo": self.times_in_goo,
         }
 
         if self.record_video and self.games % 10 == 0:
@@ -203,27 +207,6 @@ class FireboyAndWatergirlEnv(gym.Env):
                 frame = cv2.resize(frame, (self.level_width * self.video_scale, self.level_height * self.video_scale),
                                    interpolation=cv2.INTER_NEAREST)
                 self.video_writer.write(frame)
-
-        # Save and close video at the end of the episode with correct reward
-        if self.done:
-            if self.record_video and self.games % 10 == 0:
-                if self.video_writer is not None:
-                    final_reward = self.cumulative_rewards[current_env]
-                    temp_path = os.path.join(
-                        self.video_folder,
-                        f"Temp_{self.games}_{current_env}.mp4"
-                    )
-                    video_path = os.path.join(
-                        self.video_folder,
-                        f"GamePlay{self.games}_{self.game.index}_{final_reward:.2f}.mp4"
-                    )
-                    self.video_writer.release()
-                    self.video_writer = None
-                    if os.path.exists(temp_path):
-                        os.rename(temp_path, video_path)
-                    else:
-                        print(
-                            f"Warning: Temp video file not found: {temp_path}")
 
         if self.steps >= self.max_steps:
             self.done = True
@@ -304,7 +287,8 @@ class FireboyAndWatergirlEnv(gym.Env):
             'P': [150, 150, 150],
             'D': [200, 200, 100],
         }
-        magenta = [255, 0, 255]
+        light_blue = [173, 216, 230]
+        light_red = [255, 182, 193]
 
         tile_array = np.array([[level_data[y][x] for x in range(border_size, len(level_data[0]) - border_size)]
                                for y in range(border_size, len(level_data) - border_size)])
@@ -320,10 +304,10 @@ class FireboyAndWatergirlEnv(gym.Env):
         # VISUALIZE VISITED TILES AS MAGENTA
         for (fb_x, fb_y) in self.fb_visited_positions:
             if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
-                rgb_image[fb_y, fb_x] = magenta
+                rgb_image[fb_y, fb_x] = light_red
         for (wg_x, wg_y) in self.wg_visited_positions:
             if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
-                rgb_image[wg_y, wg_x] = magenta
+                rgb_image[wg_y, wg_x] = light_blue
 
         # Draw stars (vectorized)
         for star in self.stars:
@@ -359,7 +343,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
                 rgb_image[wg_y, wg_x] = color_mapping['w']
             else:
-                print(f"watergirl position out of bounds: ({wg_x}, {wg_y})")
+                print(f"Watergirl position out of bounds: ({wg_x}, {wg_y})")
 
         return rgb_image
 
@@ -415,16 +399,16 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         self.game.move_player(self.board, self.gates, [
                               self.fire_boy, self.water_girl])
-        # self.game.check_for_gate_press(
-        #     self.gates, [self.fire_boy, self.water_girl])
         self.game.check_for_star_collected(
             self.stars, [self.fire_boy, self.water_girl])
         self.game.check_for_at_door(
-            self.doors, []
+            self.doors, [self.fire_boy, self.water_girl]
         )
 
     def _compute_reward(self):
         reward = -0.01  # Small negative reward for each step
+
+        level_data = self.board.get_level_data()
 
         # Track previous number of visited positions
         prev_fb_positions = len(self.fb_visited_positions)
@@ -438,19 +422,31 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Update visited positions (this happens in step())
         if self.fire_boy:
             if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
-                # if fb_y == 3 or fb_y == 9 or fb_y == 15 or fb_y == 21:
                 self.fb_visited_positions.add((fb_x, fb_y))
+                tile_fb = level_data[fb_y+1][fb_x+1]  # +1 for border
+                if tile_fb == 'W':  # Water or Goo
+                    reward -= 20
+                    self.times_in_water += 1
+                if tile_fb == 'G':
+                    reward -= 20
+                    self.times_in_goo += 1
 
         if self.water_girl:
             if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
-                # if wg_y == 3 or wg_y == 9 or wg_y == 15 or wg_y == 21:
                 self.wg_visited_positions.add((wg_x, wg_y))
+                tile_wg = level_data[wg_y+1][wg_x+1]  # +1 for border
+                if tile_wg == 'L':  # Fire or Goo
+                    reward -= 20
+                    self.times_in_fire += 1
+                if tile_wg == 'G':
+                    reward -= 20
+                    self.times_in_goo += 1
 
         # Calculate exploration reward
         new_fb_positions = len(self.fb_visited_positions) - prev_fb_positions
         new_wg_positions = len(self.wg_visited_positions) - prev_wg_positions
-        exploration_reward = (new_fb_positions + new_wg_positions) * 5
-        reward += exploration_reward
+        exploration_reward = (new_fb_positions + new_wg_positions)
+        reward += exploration_reward * 5
 
         # Reward for collecting stars
         stars = np.array(self.stars)
@@ -461,21 +457,21 @@ class FireboyAndWatergirlEnv(gym.Env):
                 reward += 500
                 star.reward_given = True
 
-                # Reward for collecting stars
+        # Reward for collecting stars
         doors = np.array(self.doors)
         player_at_door = np.array([door.player_at_door for door in doors])
         reward_given = np.array([door.reward_given for door in doors])
         for i, door in enumerate(doors):
             if player_at_door[i] and not reward_given[i]:
                 reward += 2000
-                print('PLAYER AT DOOR!')
                 door.reward_given = True
+                print('PLAYER AT DOOR!')
 
         return reward
 
     def _check_done(self):
-        # Vectorized check if all stars are collected
-        return all(star.is_collected for star in self.stars)
+        # return all(star.is_collected for star in self.stars)
+        return all(door.player_at_door for door in self.doors)
 
 
 register(

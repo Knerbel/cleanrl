@@ -304,6 +304,14 @@ if __name__ == "__main__":
                             "charts/unique_positions", info["unique_positions"], global_step)
                         writer.add_scalar(
                             "charts/finished", info["finished"], global_step)
+                        writer.add_scalar(
+                            "charts/finished", info["finished"], global_step)
+                        writer.add_scalar(
+                            "charts/times_in_water", info["times_in_water"], global_step)
+                        writer.add_scalar(
+                            "charts/times_in_fire", info["times_in_fire"], global_step)
+                        writer.add_scalar(
+                            "charts/times_in_goo", info["times_in_goo"], global_step)
 
         # bootstrap value if not done
         with torch.no_grad():
