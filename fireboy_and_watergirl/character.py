@@ -3,7 +3,7 @@ from pygame import Rect
 
 class Character:
     def __init__(self, position):
-        self.rect = Rect(position[0], position[1], 16, 32)
+        self.rect = Rect(position[0], position[1], 16, 16)
         # motion
         self.moving_right = False
         self.moving_left = False

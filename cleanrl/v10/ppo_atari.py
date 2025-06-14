@@ -32,7 +32,7 @@ import cleanrl.v10.fireboy_and_watergirl_ppo_v10
 
 @dataclass
 class Args:
-    exp_name: str = "level 1 - exploration reward"
+    exp_name: str = "level 1 - exploration reward stop on death"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""

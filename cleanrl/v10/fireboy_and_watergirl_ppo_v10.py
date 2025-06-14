@@ -91,8 +91,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         Load the level data from the file and dynamically set up the game components.
         """
         # Read the level data from the file
-        with open('./fireboy_and_watergirl/data/'+self.level+'.txt', 'r') as file:
-            level_data = [line.strip().split(',') for line in file.readlines()]
+        # with open('./fireboy_and_watergirl/data/'+self.level+'.txt', 'r') as file:
+        #     level_data = [line.strip().split(',') for line in file.readlines()]
 
         # Initialize game components
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
@@ -101,7 +101,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.stars: list[Stars] = []
 
         # Parse the level data to dynamically set up components
-        for y, row in enumerate(level_data):
+        for y, row in enumerate(self.board.get_level_data()):
             for x, tile in enumerate(row):
                 # Assuming 16x16 tiles
                 if tile == 'f':  # Fireboy starting position
@@ -330,7 +330,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         if self.fire_boy:
             fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
             fb_x = int(fb_x-1)
-            fb_y = int(fb_y)
+            fb_y = int(fb_y-1)
             if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
                 rgb_image[fb_y, fb_x] = color_mapping['f']
             else:
@@ -339,7 +339,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         if self.water_girl:
             wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
             wg_x = int(wg_x-1)
-            wg_y = int(wg_y)
+            wg_y = int(wg_y-1)
             if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
                 rgb_image[wg_y, wg_x] = color_mapping['w']
             else:
@@ -422,25 +422,27 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Update visited positions (this happens in step())
         if self.fire_boy:
             if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
-                self.fb_visited_positions.add((fb_x, fb_y))
                 tile_fb = level_data[fb_y+1][fb_x+1]  # +1 for border
                 if tile_fb == 'W':  # Water or Goo
-                    reward -= 20
+                    reward -= 7.5
                     self.times_in_water += 1
-                if tile_fb == 'G':
-                    reward -= 20
+                elif tile_fb == 'G':
+                    reward -= 7.5
                     self.times_in_goo += 1
+                else:
+                    self.fb_visited_positions.add((fb_x, fb_y))
 
         if self.water_girl:
             if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
-                self.wg_visited_positions.add((wg_x, wg_y))
                 tile_wg = level_data[wg_y+1][wg_x+1]  # +1 for border
                 if tile_wg == 'L':  # Fire or Goo
-                    reward -= 20
+                    reward -= 7.5
                     self.times_in_fire += 1
-                if tile_wg == 'G':
-                    reward -= 20
+                elif tile_wg == 'G':
+                    reward -= 7.5
                     self.times_in_goo += 1
+                else:
+                    self.wg_visited_positions.add((wg_x, wg_y))
 
         # Calculate exploration reward
         new_fb_positions = len(self.fb_visited_positions) - prev_fb_positions
@@ -463,15 +465,34 @@ class FireboyAndWatergirlEnv(gym.Env):
         reward_given = np.array([door.reward_given for door in doors])
         for i, door in enumerate(doors):
             if player_at_door[i] and not reward_given[i]:
-                reward += 2000
+                reward += 5000
                 door.reward_given = True
                 print('PLAYER AT DOOR!')
 
         return reward
 
     def _check_done(self):
-        # return all(star.is_collected for star in self.stars)
         return all(door.player_at_door for door in self.doors)
+        # End episode if either agent is at a forbidden tile
+        level_data = self.board.get_level_data()
+        fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
+        fb_x, fb_y = int(fb_x-1), int(fb_y-1)
+        wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
+        wg_x, wg_y = int(wg_x-1), int(wg_y-1)
+
+        forbidden_fb = False
+        forbidden_wg = False
+
+        if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
+            tile_fb = level_data[fb_y+1][fb_x+1]
+            if tile_fb in ['W', 'G']:  # Water, Goo, Lava
+                forbidden_fb = True
+        if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
+            tile_wg = level_data[wg_y+1][wg_x+1]
+            if tile_wg in ['G', 'L']:  # Water, Goo, Lava
+                forbidden_wg = True
+            # End episode if forbidden tile touched or both players at their doors
+        return forbidden_fb or forbidden_wg or all(door.player_at_door for door in self.doors)
 
 
 register(
