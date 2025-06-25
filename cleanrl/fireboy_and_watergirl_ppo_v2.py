@@ -8,9 +8,9 @@ from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import FireBoy, WaterGirl
 from fireboy_and_watergirl.doors import FireDoor, WaterDoor
 from fireboy_and_watergirl.game import Game
-from fireboy_and_watergirl.gates import Gates
+from fireboy_and_watergirl.gate import Gate
 
-from fireboy_and_watergirl.stars import Stars
+from fireboy_and_watergirl.star import Star
 
 
 class FireboyAndWatergirlEnv(gym.Env):
@@ -69,9 +69,9 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Initialize game components
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
-        self.gates: list[Gates] = []
+        self.gates: list[Gate] = []
         self.doors: list[FireDoor | WaterDoor] = []
-        self.stars: list[Stars] = []
+        self.stars: list[Star] = []
         self.fire_boy: FireBoy = None
         self.water_girl: WaterGirl = None
 
@@ -112,9 +112,9 @@ class FireboyAndWatergirlEnv(gym.Env):
                     self.gates.append(
                         WaterDoor((x * 16, y * 16), [(x * 16, y * 16)]))
                 elif tile == 'a':  # Gate A
-                    self.stars.append(Stars([x * 16, y * 16], "fire"))
+                    self.stars.append(Star([x * 16, y * 16], "fire"))
                 elif tile == 'b':  # Gate B
-                    self.stars.append(Stars([x * 16, y * 16], "water"))
+                    self.stars.append(Star([x * 16, y * 16], "water"))
 
         # Add more cases as needed for other tiles
 
@@ -366,7 +366,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Update the game state
         self.game.move_player(self.board, self.gates, [
                               self.fire_boy, self.water_girl])
-        self.game.check_for_gate_press(
+        self.game.check_for_plates_press(
             self.gates, [self.fire_boy, self.water_girl])
         self.game.check_for_star_collected(
             self.stars, [self.fire_boy, self.water_girl])

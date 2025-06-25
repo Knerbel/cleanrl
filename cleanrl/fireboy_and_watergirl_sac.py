@@ -1,7 +1,7 @@
 from matplotlib import pyplot as plt
-from fireboy_and_watergirl.stars import Stars
+from fireboy_and_watergirl.star import Star
 import time
-from fireboy_and_watergirl.gates import Gates
+from fireboy_and_watergirl.gate import Gate
 from fireboy_and_watergirl.game import Game
 from fireboy_and_watergirl.doors import FireDoor, WaterDoor
 from fireboy_and_watergirl.controller import GeneralController
@@ -78,9 +78,9 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Initialize game components
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
-        self.gates: list[Gates] = []
+        self.gates: list[Gate] = []
         self.doors: list[FireDoor | WaterDoor] = []
-        self.stars: list[Stars] = []
+        self.stars: list[Star] = []
         self.fire_boy: FireBoy = None
         self.water_girl: WaterGirl = None
 
@@ -121,9 +121,9 @@ class FireboyAndWatergirlEnv(gym.Env):
                     self.gates.append(
                         WaterDoor((x * 16, y * 16), [(x * 16, y * 16)]))
                 elif tile == 'a':  # Gate A
-                    self.stars.append(Stars([x * 16, y * 16], "fire"))
+                    self.stars.append(Star([x * 16, y * 16], "fire"))
                 elif tile == 'b':  # Gate B
-                    self.stars.append(Stars([x * 16, y * 16], "water"))
+                    self.stars.append(Star([x * 16, y * 16], "water"))
 
     def _load_level1(self):
         """
@@ -133,7 +133,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.board = Board('./fireboy_and_watergirl/data/level1b.txt')
             gate_location = (285, 128)
             plate_locations = [(190, 168), (390, 168)]
-            gate = Gates(gate_location, plate_locations)
+            gate = Gate(gate_location, plate_locations)
             self.gates = [gate]
 
             fire_door_location = (64, 48)
@@ -148,17 +148,17 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.water_girl = WaterGirl(water_girl_location)
 
             self.stars = [
-                Stars((240, 330), "fire"),
-                Stars((260, 330), "water"),
+                Star((240, 330), "fire"),
+                Star((260, 330), "water"),
 
-                Stars((480, 300), "fire"),
-                Stars((500, 300), "water"),
+                Star((480, 300), "fire"),
+                Star((500, 300), "water"),
 
-                Stars((370, 240), "fire"),
-                Stars((390, 240), "water"),
+                Star((370, 240), "fire"),
+                Star((390, 240), "water"),
 
-                Stars((30, 200), "fire"),
-                Stars((50, 200), "water"),
+                Star((30, 200), "fire"),
+                Star((50, 200), "water"),
             ]
 
         # Add more levels as needed
@@ -499,7 +499,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Update the game state
         self.game.move_player(self.board, self.gates, [
                               self.fire_boy, self.water_girl])
-        self.game.check_for_gate_press(
+        self.game.check_for_plates_press(
             self.gates, [self.fire_boy, self.water_girl])
         self.game.check_for_star_collected(
             self.stars, [self.fire_boy, self.water_girl])

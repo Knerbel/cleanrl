@@ -11,8 +11,8 @@ from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import FireBoy, WaterGirl
 from fireboy_and_watergirl.doors import FireDoor, WaterDoor
 from fireboy_and_watergirl.game import Game
-from fireboy_and_watergirl.gates import Gates
-from fireboy_and_watergirl.stars import Stars
+from fireboy_and_watergirl.gate import Gate
+from fireboy_and_watergirl.star import Star
 
 # v10 level 1
 
@@ -96,9 +96,9 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Initialize game components
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
-        self.gates: list[Gates] = []
+        self.gates: list[Gate] = []
         self.doors: list[FireDoor | WaterDoor] = []
-        self.stars: list[Stars] = []
+        self.stars: list[Star] = []
 
         # Parse the level data to dynamically set up components
         for y, row in enumerate(self.board.get_level_data()):
@@ -126,9 +126,9 @@ class FireboyAndWatergirlEnv(gym.Env):
                 #     self.gates.append(
                 #         WaterDoor((x * 16, y * 16), [(x * 16, y * 16)]))
                 elif tile == 'a':  # Gate A
-                    self.stars.append(Stars([x * 16, y * 16], "fire"))
+                    self.stars.append(Star([x * 16, y * 16], "fire"))
                 elif tile == 'b':  # Gate B
-                    self.stars.append(Stars([x * 16, y * 16], "water"))
+                    self.stars.append(Star([x * 16, y * 16], "water"))
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)

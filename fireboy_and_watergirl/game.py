@@ -2,7 +2,9 @@
 from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import Character
 from fireboy_and_watergirl.doors import FireDoor, WaterDoor
-from fireboy_and_watergirl.stars import Stars
+from fireboy_and_watergirl.gate import Gate
+from fireboy_and_watergirl.plate import Plate
+from fireboy_and_watergirl.star import Star
 from pygame import Rect
 
 
@@ -64,144 +66,144 @@ class Game:
         self.display.blit(level_select.left_player, left_cords)
         self.display.blit(level_select.right_player, right_cords)
 
-    def refresh_window(self):
-        """
-        Refresh and draw the game screen
-        """
-        new_window_size, center_cords = self.adjust_scale()
-        # scale internal display to match window)
-        # new_disp = pygame.transform.scale(self.display, new_window_size)
-        # self.screen.blit(new_disp, center_cords)
-        # pygame.display.update()
+    # def refresh_window(self):
+    #     """
+    #     Refresh and draw the game screen
+    #     """
+    #     new_window_size, center_cords = self.adjust_scale()
+    #     # scale internal display to match window)
+    #     # new_disp = pygame.transform.scale(self.display, new_window_size)
+    #     # self.screen.blit(new_disp, center_cords)
+    #     # pygame.display.update()
 
-    def adjust_scale(self):
-        """
-        Adjust internal screen for window scaling
+    # def adjust_scale(self):
+    #     """
+    #     Adjust internal screen for window scaling
 
-        If the window size is changed, scale the game to the maximum amount
-        while keeping the same aspect ratio. Also keep the game centered in the
-        window.
+    #     If the window size is changed, scale the game to the maximum amount
+    #     while keeping the same aspect ratio. Also keep the game centered in the
+    #     window.
 
-        Returns:
-            display_size::tuple (height, width)
-                The updated height and width of the internal game display
-            cords::tuple (x_cord, y_cord)
-                The coordinates of the upper left corner of the internal game
-                display so that when it is blit onto window, it is centered.
-        """
-        window_size = self.screen.get_size()
+    #     Returns:
+    #         display_size::tuple (height, width)
+    #             The updated height and width of the internal game display
+    #         cords::tuple (x_cord, y_cord)
+    #             The coordinates of the upper left corner of the internal game
+    #             display so that when it is blit onto window, it is centered.
+    #     """
+    #     window_size = self.screen.get_size()
 
-        # if window is longer than aspect ratio
-        if window_size[0] / window_size[1] >= 1.5:
-            display_size = (int(1.5 * window_size[1]), window_size[1])
-        # if window is taller than aspect ratio
-        else:
-            display_size = (window_size[0], int(.75 * window_size[0]))
-        # find cords so that display is centered
-        cords = ((window_size[0] - display_size[0]) / 2,
-                 (window_size[1] - display_size[1]) / 2)
+    #     # if window is longer than aspect ratio
+    #     if window_size[0] / window_size[1] >= 1.5:
+    #         display_size = (int(1.5 * window_size[1]), window_size[1])
+    #     # if window is taller than aspect ratio
+    #     else:
+    #         display_size = (window_size[0], int(.75 * window_size[0]))
+    #     # find cords so that display is centered
+    #     cords = ((window_size[0] - display_size[0]) / 2,
+    #              (window_size[1] - display_size[1]) / 2)
 
-        return display_size, cords
+    #     return display_size, cords
 
     # game mechanics
 
-    def draw_level_background(self, board: Board):
-        """
-        Draw the background of the level.
+    # def draw_level_background(self, board: Board):
+    #     """
+    #     Draw the background of the level.
 
-        Args:
-            board::board class object
-                board class object that contains information on chunk images
-                and their locations
-        """
-        # self.display.blit(board.get_background(), (0, 0))
+    #     Args:
+    #         board::board class object
+    #             board class object that contains information on chunk images
+    #             and their locations
+    #     """
+    #     # self.display.blit(board.get_background(), (0, 0))
 
-    def draw_board(self, board: Board):
-        """
-        Draw the board.
+    # def draw_board(self, board: Board):
+    #     """
+    #     Draw the board.
 
-        Args:
-            board::board class object
-                board class object that contains information on chunk images
-                and their locations
-        """
-        # draw the full background
-        board_textures = board.get_board_textures()
-        # draw the solid blocks and liquids
-        for y, row in enumerate(board.get_game_map()):
-            for x, tile in enumerate(row):
-                if tile != "0" and tile != " ":
-                    self.display.blit(
-                        board_textures[f"{tile}"], (x * 16, y * 16)
-                    )
+    #     Args:
+    #         board::board class object
+    #             board class object that contains information on chunk images
+    #             and their locations
+    #     """
+    #     # draw the full background
+    #     board_textures = board.get_board_textures()
+    #     # draw the solid blocks and liquids
+    #     for y, row in enumerate(board.get_game_map()):
+    #         for x, tile in enumerate(row):
+    #             if tile != "0" and tile != " ":
+    #                 self.display.blit(
+    #                     board_textures[f"{tile}"], (x * 16, y * 16)
+    #                 )
 
-    def draw_gates(self, gates):
-        """
-        Draw gates and buttons.
+    # def draw_gates(self, gates):
+    #     """
+    #     Draw gates and buttons.
 
-        Args:
-            gates::[gate object, ...]
-                A list of gate objects with image and location information.
-        """
-        # for gate in gates:
-        #     # display gate
-        #     self.display.blit(gate.gate_image, gate.gate_location)
+    #     Args:
+    #         gates::[gate object, ...]
+    #             A list of gate objects with image and location information.
+    #     """
+    #     # for gate in gates:
+    #     #     # display gate
+    #     #     self.display.blit(gate.gate_image, gate.gate_location)
 
-        #     for location in gate.plate_locations:
-        #         # display plate location
-        #         self.display.blit(gate.plate_image, location)
+    #     #     for location in gate.plate_locations:
+    #     #         # display plate location
+    #     #         self.display.blit(gate.plate_image, location)
 
-    def draw_doors(self, doors):
-        """
-        Draw doors
+    # def draw_doors(self, doors):
+    #     """
+    #     Draw doors
 
-        Args:
-            doors::[door object, door object]
-                A list of door class objects containing image and location
-                information of door, door background, and fame.
-        """
-        # for door in doors:
-        #     # draw door background
-        #     self.display.blit(door.door_background, door.background_location)
-        #     # draw door
-        #     self.display.blit(door.door_image, door.door_location)
-        #     # draw door frame
-        #     self.display.blit(door.frame_image, door.frame_location)
+    #     Args:
+    #         doors::[door object, door object]
+    #             A list of door class objects containing image and location
+    #             information of door, door background, and fame.
+    #     """
+    #     # for door in doors:
+    #     #     # draw door background
+    #     #     self.display.blit(door.door_background, door.background_location)
+    #     #     # draw door
+    #     #     self.display.blit(door.door_image, door.door_location)
+    #     #     # draw door frame
+    #     #     self.display.blit(door.frame_image, door.frame_location)
 
-    def draw_player(self, players: list[Character]):
-        """
-        Draw the player.
+    # def draw_player(self, players: list[Character]):
+    #     """
+    #     Draw the player.
 
-        If the player is moving right or left, draw the player as facing that
-        direction.
+    #     If the player is moving right or left, draw the player as facing that
+    #     direction.
 
-        Args:
-            player::[player object, player object]
-                a list of player objects that contains movement data as well as
-                different images, one for each direction it can face.
-        """
-        # for player in players:
-        #     if player.moving_right:
-        #         player_image = player.side_image
-        #     elif player.moving_left:
-        #         player_image = pygame.transform.flip(
-        #             player.side_image, True, False)
-        #     else:
-        #         player_image = player.image
-        #     player_image.set_colorkey((255, 0, 255))
-        #     self.display.blit(player_image, (player.rect.x, player.rect.y))
+    #     Args:
+    #         player::[player object, player object]
+    #             a list of player objects that contains movement data as well as
+    #             different images, one for each direction it can face.
+    #     """
+    #     # for player in players:
+    #     #     if player.moving_right:
+    #     #         player_image = player.side_image
+    #     #     elif player.moving_left:
+    #     #         player_image = pygame.transform.flip(
+    #     #             player.side_image, True, False)
+    #     #     else:
+    #     #         player_image = player.image
+    #     #     player_image.set_colorkey((255, 0, 255))
+    #     #     self.display.blit(player_image, (player.rect.x, player.rect.y))
 
-    def draw_stars(self, stars):
-        """
-        Draw the stars on the screen.
+    # def draw_stars(self, stars):
+    #     """
+    #     Draw the stars on the screen.
 
-        Args:
-            screen (pygame.Surface): The game screen to draw on.
-        """
-        # for i, star in enumerate(stars):
-        #     if not star.is_collected:  # Only draw uncollected stars
-        #         self.display.blit(
-        #             star.star_image, (star.star_location[0], star.star_location[1]))
+    #     Args:
+    #         screen (pygame.Surface): The game screen to draw on.
+    #     """
+    #     # for i, star in enumerate(stars):
+    #     #     if not star.is_collected:  # Only draw uncollected stars
+    #     #         self.display.blit(
+    #     #             star.star_image, (star.star_location[0], star.star_location[1]))
 
     def move_player(self, board: Board, doors: list[FireDoor | WaterDoor], players: list[Character]):
         """
@@ -319,7 +321,7 @@ class Game:
                 return True
         return False
 
-    def check_for_star_collected(self, stars: list[Stars], players: list[Character]):
+    def check_for_star_collected(self, stars: list[Star], players: list[Character]):
         """
         Check if any player has collected a star.
 
@@ -337,33 +339,30 @@ class Game:
                         # Mark the star as collected
                         star.collect_star()
 
-    def check_for_gate_press(self, gates, players: list[Character]):
+    def check_for_plates_press(self, plates: list[Plate], players: list[Character]):
         """
-        Check to see if either player is touching one of the gate buttons.
+        Check to see if either player is standing one tile above a plate.
 
         Args:
-            gates::[gate object, ...]
-                A list of gate class object containing information on location
-                of the gate, the buttons, and images
+            plates::[plate object, ...]
+                A list of plate class objects containing information on location
+                of the plate.
             players::[player object, player object]
                 A list of player class objects containing information on their
                 location.
         """
-        for gate in gates:
-            plate_collisions = []
+        CHUNK_SIZE = 16  # Make sure this matches your board's chunk size
+        for plate in plates:
+            plate._is_pressed = False  # Assume not pressed
+            plate_x = plate.rect.x // CHUNK_SIZE
+            plate_y = plate.rect.y // CHUNK_SIZE
             for player in players:
-                # is player is colliding with plate, add to list
-                plates = gate.get_plates()
-                plate_collisions += self.collision_test(player.rect, plates)
-            # if the collide list is longer than zero, set plate to pressed
-            if plate_collisions:
-                gate.plate_is_pressed = True
-            # otherwise, set plate to not being pressed
-            # else:
-            #     gate.plate_is_pressed = False
-            # attempt to raise the gate. If plate is pressed, gate will raise,
-            # otherwise, the gate will close
-            gate.try_open_gate()
+                player_x = player.rect.x // CHUNK_SIZE
+                player_y = player.rect.y // CHUNK_SIZE
+                # Check if player is exactly one tile above the plate
+                if player_x == plate_x and player_y == plate_y - 1:
+                    plate._is_pressed = True
+                    break  # No need to check other players for this plate
 
     def check_for_at_door(self, doors: FireDoor | WaterDoor, players: list[Character]):
         """
@@ -382,26 +381,26 @@ class Game:
                     if player.get_type() == door._player:
                         door.player_at_door = True
 
-    def check_for_door_open(self, door: FireDoor | WaterDoor, player: Character):
-        """
-        Check to see if a player is at the door.
+    # def check_for_door_open(self, door: FireDoor | WaterDoor, player: Character):
+    #     """
+    #     Check to see if a player is at the door.
 
-        Args:
-            door::door class object
-                A door object containing information on its location and state
-            player::player class object
-                A player object containing information on its location
-        """
-        # check to see if the player is at the door
-        door_collision = self.collision_test(player.rect, [door.get_door()])
-        # if the collision list is greater than zero, player is at door
-        if door_collision:
-            door.player_at_door = True
-        # otherwise, player is not at door
-        else:
-            door.player_at_door = False
-        # attempt to raise door. If nobody is at door, try to close the door
-        door.try_raise_door()
+    #     Args:
+    #         door::door class object
+    #             A door object containing information on its location and state
+    #         player::player class object
+    #             A player object containing information on its location
+    #     """
+    #     # check to see if the player is at the door
+    #     door_collision = self.collision_test(player.rect, [door.get_door()])
+    #     # if the collision list is greater than zero, player is at door
+    #     if door_collision:
+    #         door.player_at_door = True
+    #     # otherwise, player is not at door
+    #     else:
+    #         door.player_at_door = False
+    #     # attempt to raise door. If nobody is at door, try to close the door
+    #     door.try_raise_door()
 
     @staticmethod
     def level_is_done(doors: list[FireDoor | WaterDoor]):

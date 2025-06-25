@@ -28,6 +28,7 @@ import cleanrl.v9.fireboy_and_watergirl_ppo_random_baseline
 import cleanrl.v9.fireboy_and_watergirl_ppo_v9
 import cleanrl.v9.fireboy_and_watergirl_ppo_v9_wo_observation_space
 import cleanrl.v10.fireboy_and_watergirl_ppo_v10
+import cleanrl.v11.fireboy_and_watergirl_ppo_v11
 
 
 @dataclass
@@ -50,7 +51,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v10'
+    env_id: str = 'FireboyAndWatergirl-ppo-v11'
     """the id of the environment"""
     total_timesteps: int = 2000_000
     """total timesteps of the experiments"""
@@ -142,6 +143,12 @@ class Agent(nn.Module):
         self.actor = layer_init(nn.Linear(512, 8), std=0.01)
         self.critic = layer_init(nn.Linear(512, 1), std=1)
 
+    def forward(self, x):
+        # x shape: (batch, 4, 23, 34, 3)
+        x = x.permute(0, 1, 4, 2, 3).reshape(
+            x.shape[0], -1, x.shape[2], x.shape[3])
+        return self.network(x / 255.0)
+
     def get_value(self, x: torch.Tensor):
         # x shape: (batch, 4, 23, 34, 3) from env, need to reshape to (batch, 12, 23, 34)
         x = x.permute(0, 1, 4, 2, 3).reshape(
@@ -215,6 +222,17 @@ if __name__ == "__main__":
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+
+    dummy_input = torch.randn(1, 4, 23, 34, 3).to(device)
+    torch.onnx.export(
+        agent,
+        dummy_input,
+        "ppo_agent.onnx",
+        input_names=["input"],
+        output_names=["output"],
+        opset_version=11
+    )
+    print("Exported model to ppo_agent.onnx")
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) +

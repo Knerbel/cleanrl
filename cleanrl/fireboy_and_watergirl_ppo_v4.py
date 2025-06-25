@@ -9,8 +9,8 @@ from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import FireBoy, WaterGirl
 from fireboy_and_watergirl.doors import FireDoor, WaterDoor
 from fireboy_and_watergirl.game import Game
-from fireboy_and_watergirl.gates import Gates
-from fireboy_and_watergirl.stars import Stars
+from fireboy_and_watergirl.gate import Gate
+from fireboy_and_watergirl.star import Star
 
 
 class FireboyAndWatergirlEnv(gym.Env):
@@ -75,9 +75,9 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Initialize game components
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
-        self.gates: list[Gates] = []
+        self.gates: list[Gate] = []
         self.doors: list[FireDoor | WaterDoor] = []
-        self.stars: list[Stars] = []
+        self.stars: list[Star] = []
         self.fire_boy: FireBoy = None
         self.water_girl: WaterGirl = None
 
@@ -143,10 +143,10 @@ class FireboyAndWatergirlEnv(gym.Env):
 
             if len(selected_positions) > 2:
                 self.stars.append(
-                    Stars([selected_positions[2][0] * 16, selected_positions[2][1] * 16], "fire"))
+                    Star([selected_positions[2][0] * 16, selected_positions[2][1] * 16], "fire"))
             if len(selected_positions) > 3:
                 self.stars.append(
-                    Stars([selected_positions[3][0] * 16, selected_positions[3][1] * 16], "water"))
+                    Star([selected_positions[3][0] * 16, selected_positions[3][1] * 16], "water"))
 
         # Keep doors and gates from the original level data
         for y, row in enumerate(level_data):
@@ -420,7 +420,7 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         self.game.move_player(self.board, self.gates, [
                               self.fire_boy, self.water_girl])
-        self.game.check_for_gate_press(
+        self.game.check_for_plates_press(
             self.gates, [self.fire_boy, self.water_girl])
         self.game.check_for_star_collected(
             self.stars, [self.fire_boy, self.water_girl])

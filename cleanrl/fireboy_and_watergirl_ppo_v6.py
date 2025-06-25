@@ -13,8 +13,8 @@ from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import FireBoy, WaterGirl
 from fireboy_and_watergirl.doors import FireDoor, WaterDoor
 from fireboy_and_watergirl.game import Game
-from fireboy_and_watergirl.gates import Gates
-from fireboy_and_watergirl.stars import Stars
+from fireboy_and_watergirl.gate import Gate
+from fireboy_and_watergirl.star import Star
 
 # v6 uses exploration rewards
 
@@ -50,7 +50,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self._load_level()
 
         self.steps = 0
-        self.max_steps = 128 * 2  # 400
+        self.max_steps = 128 * 4  # 400
         self.envs = 8
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
@@ -59,6 +59,9 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         self.fb_visited_positions = set()  # Add this line to store visited positions
         self.wg_visited_positions = set()  # Add this line to store visited positions
+
+        self.fb_last_position = None
+        self.wg_last_position = None
 
         # Define the flattened observation space for 3 stacked frames
         self.observation_space = spaces.Box(
@@ -95,9 +98,9 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Initialize game components
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
-        self.gates: list[Gates] = []
+        self.gates: list[Gate] = []
         self.doors: list[FireDoor | WaterDoor] = []
-        self.stars: list[Stars] = []
+        self.stars: list[Star] = []
         self.fire_boy: FireBoy = None
         self.water_girl: WaterGirl = None
 
@@ -138,9 +141,9 @@ class FireboyAndWatergirlEnv(gym.Env):
                     self.gates.append(
                         WaterDoor((x * 16, y * 16), [(x * 16, y * 16)]))
                 elif tile == 'a':  # Gate A
-                    self.stars.append(Stars([x * 16, y * 16], "fire"))
+                    self.stars.append(Star([x * 16, y * 16], "fire"))
                 elif tile == 'b':  # Gate B
-                    self.stars.append(Stars([x * 16, y * 16], "water"))
+                    self.stars.append(Star([x * 16, y * 16], "water"))
 
         # Add more cases as needed for other tiles
 
@@ -418,7 +421,7 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         self.game.move_player(self.board, self.gates, [
                               self.fire_boy, self.water_girl])
-        self.game.check_for_gate_press(
+        self.game.check_for_plates_press(
             self.gates, [self.fire_boy, self.water_girl])
         self.game.check_for_star_collected(
             self.stars, [self.fire_boy, self.water_girl])
@@ -430,17 +433,18 @@ class FireboyAndWatergirlEnv(gym.Env):
         prev_fb_positions = len(self.fb_visited_positions)
         prev_wg_positions = len(self.wg_visited_positions)
 
+        fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
+        fb_x, fb_y = int(fb_x-1), int(fb_y-1)
+        wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
+        wg_x, wg_y = int(wg_x-1), int(wg_y-1)
+
         # Update visited positions (this happens in step())
         if self.fire_boy:
-            fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
-            fb_x, fb_y = int(fb_x-1), int(fb_y-1)
             if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
                 if fb_y == 9 or fb_y == 15 or fb_y == 21:
                     self.fb_visited_positions.add((fb_x, fb_y))
 
         if self.water_girl:
-            wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
-            wg_x, wg_y = int(wg_x-1), int(wg_y-1)
             if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
                 if wg_y == 9 or wg_y == 15 or wg_y == 21:
                     self.wg_visited_positions.add((wg_x, wg_y))
@@ -452,6 +456,18 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Add exploration reward
         # reward += exploration_reward
+
+        # Check for repeated positions
+        if self.fb_last_position is not None:
+            if (fb_x, fb_y) == self.fb_last_position:
+                reward -= 0.5  # Penalty for Fireboy staying in same position
+
+        if self.wg_last_position is not None:
+            if (wg_x, wg_y) == self.wg_last_position:
+                reward -= 0.5  # Penalty for Watergirl staying in same posit
+
+        self.fb_last_position = (fb_x, fb_y)
+        self.wg_last_position = (wg_x, wg_y)
 
         # Reward for collecting stars
         stars = np.array(self.stars)
