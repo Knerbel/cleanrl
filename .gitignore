@@ -132,3 +132,4 @@ venv.bak/
 .mypy_cache/
 
 /episode_videos
+/episode_images

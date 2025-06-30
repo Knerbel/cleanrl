@@ -30,7 +30,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         # 4 actions for each character
         self.action_space = spaces.MultiDiscrete([4, 4])
         # Initialize game components
-        self.level = 'level1_plates_and_gates'
+        self.level = 'level3_plates_and_gates'
 
         self.game = Game()  # Instantiate the Game class
         self.board = None
@@ -48,7 +48,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self._load_level()
 
         self.steps = 0
-        self.max_steps = 128 * 4  # 400
+        self.max_steps = 128 * 5  # 400
         self.envs = 8
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
@@ -75,6 +75,10 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.video_folder = "episode_videos"
         if not os.path.exists(self.video_folder):
             os.makedirs(self.video_folder)
+
+        self.image_folder = "episode_images"
+        if not os.path.exists(self.image_folder):
+            os.makedirs(self.image_folder)
 
         self.record_video = True  # Set to True to record videos
         self.video_writer = None
@@ -199,6 +203,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             "unique_positions": len(self.fb_visited_positions) + len(self.wg_visited_positions),
             "stars_collected": sum(star.is_collected for star in self.stars),
             "finished": 1 if self.done else 0,
+            "players_at_door": sum(door.player_at_door for door in self.doors),
             "zero_reward": 1 if reward <= 0 else 0,
             "times_in_water": self.times_in_water,
             "times_in_fire": self.times_in_fire,
@@ -215,6 +220,21 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         if self.steps >= self.max_steps:
             self.done = True
+
+        if self.done:
+            # Save the last frame as an image
+            image_path = os.path.join(
+                self.image_folder,
+                f"episode_{self.games}_final.png"
+            )
+            frame_bgr = cv2.cvtColor(self.state, cv2.COLOR_RGB2BGR)
+            frame_bgr = cv2.resize(
+                frame_bgr,
+                (self.level_width * self.video_scale,
+                 self.level_height * self.video_scale),
+                interpolation=cv2.INTER_NEAREST
+            )
+            cv2.imwrite(image_path, frame_bgr)
 
         return self.state, reward, self.done, False, info
 
@@ -291,6 +311,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             'B': [0, 150, 200],
             'P': [150, 150, 150],
             'D': [200, 200, 100],
+            'D_open': [180, 140, 20],
         }
         light_blue = [173, 216, 230]
         light_red = [255, 182, 193]
@@ -332,14 +353,17 @@ class FireboyAndWatergirlEnv(gym.Env):
                     if all(not plate._is_pressed for plate in self.plates):
                         rgb_image[y, x] = color_mapping['D']
                     else:
-                        rgb_image[y, x] = color_mapping[' ']
+                        rgb_image[y, x] = color_mapping['D_open']
 
         # Draw End doors
         for door in self.doors:
             d_x, d_y = np.array(door.get_position()) // 16 - border_size
             if 0 <= d_y < rgb_image.shape[0] and 0 <= d_x < rgb_image.shape[1]:
-                rgb_image[s_y, s_x] = color_mapping['A' if star._player ==
-                                                    "fire" else 'B']
+                if not door.reward_given:
+                    rgb_image[d_y][d_x] = color_mapping['A' if door._player ==
+                                                        "fire" else 'B']
+                else:
+                    rgb_image[d_y][d_x] = color_mapping[' ']
 
         # Draw dynamic player positions
         if self.fire_boy:
@@ -423,7 +447,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         )
 
     def _compute_reward(self):
-        reward = -0.01  # Small negative reward for each step
+        reward = -10  # Small negative reward for each step
 
         level_data = self.board.get_level_data()
 
@@ -467,6 +491,27 @@ class FireboyAndWatergirlEnv(gym.Env):
         exploration_reward = (new_fb_positions + new_wg_positions)
         reward += exploration_reward * 5
 
+        # Rewards for passing through doors
+        # Reward for stepping on a 'D' (gate) tile
+        # if self.fire_boy:
+        #     if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
+        #         if level_data[fb_y+1][fb_x+1] == 'D':
+        #             reward += 500
+        # if self.water_girl:
+        #     if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
+        #         if level_data[wg_y+1][wg_x+1] == 'D':
+        #             reward += 500
+
+        # Reward for stepping on a plate
+        if self.fire_boy:
+            if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
+                if level_data[fb_y+2][fb_x+1] == 'P':
+                    reward += 50
+        if self.water_girl:
+            if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
+                if level_data[wg_y+2][wg_x+1] == 'P':
+                    reward += 50
+
         # Reward for collecting stars
         stars = np.array(self.stars)
         is_collected = np.array([star.is_collected for star in stars])
@@ -476,13 +521,13 @@ class FireboyAndWatergirlEnv(gym.Env):
                 reward += 500
                 star.reward_given = True
 
-        # Reward for collecting stars
+        # Reward for goal
         doors = np.array(self.doors)
         player_at_door = np.array([door.player_at_door for door in doors])
         reward_given = np.array([door.reward_given for door in doors])
         for i, door in enumerate(doors):
             if player_at_door[i] and not reward_given[i]:
-                reward += 5000
+                reward += 8000
                 door.reward_given = True
                 print('PLAYER AT DOOR!')
 

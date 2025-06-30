@@ -1,7 +1,7 @@
 
 from fireboy_and_watergirl.board import Board
 from fireboy_and_watergirl.character import Character
-from fireboy_and_watergirl.doors import FireDoor, WaterDoor
+from fireboy_and_watergirl.doors import Doors, FireDoor, WaterDoor
 from fireboy_and_watergirl.gate import Gate
 from fireboy_and_watergirl.plate import Plate
 from fireboy_and_watergirl.star import Star
@@ -364,7 +364,7 @@ class Game:
                     plate._is_pressed = True
                     break  # No need to check other players for this plate
 
-    def check_for_at_door(self, doors: FireDoor | WaterDoor, players: list[Character]):
+    def check_for_at_door(self, doors: list[FireDoor | WaterDoor], players: list[Character]):
         """
         Check to see if a player is at the door.
 

@@ -55,13 +55,13 @@ class Args:
     # Algorithm specific arguments
     env_id: str = 'FireboyAndWatergirl-ppo-v6'  # "BreakoutNoFrameskip-v4"
     """the id of the environment"""
-    total_timesteps: int = 1000_000
+    total_timesteps: int = 2000_000
     """total timesteps of the experiments"""
-    learning_rate: float = 1 * 2.5e-4
+    learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
     num_envs: int = 8
     """the number of parallel game environments"""
-    num_steps: int = 128 * 4
+    num_steps: int = 128 * 5
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
@@ -307,6 +307,8 @@ if __name__ == "__main__":
                             "charts/unique_positions", info["unique_positions"], global_step)
                         writer.add_scalar(
                             "charts/finished", info["finished"], global_step)
+                        writer.add_scalar(
+                            "charts/players_at_door", info["players_at_door"], global_step)
 
         # bootstrap value if not done
         with torch.no_grad():
