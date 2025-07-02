@@ -29,11 +29,12 @@ import cleanrl.v9.fireboy_and_watergirl_ppo_v9
 import cleanrl.v9.fireboy_and_watergirl_ppo_v9_wo_observation_space
 import cleanrl.v10.fireboy_and_watergirl_ppo_v10
 import cleanrl.v11.fireboy_and_watergirl_ppo_v11
+import cleanrl.v12.fireboy_and_watergirl_ppo_v12
 
 
 @dataclass
 class Args:
-    exp_name: str = "level 1 - plates and gates"
+    exp_name: str = "level0_boxes"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -51,7 +52,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v11'
+    env_id: str = 'FireboyAndWatergirl-ppo-v12'
     """the id of the environment"""
     total_timesteps: int = 2000_000
     """total timesteps of the experiments"""

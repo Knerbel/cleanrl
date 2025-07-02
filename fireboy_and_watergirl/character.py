@@ -21,7 +21,7 @@ class Character:
         MOVEMENT_MULTIPLIER = 4
         # Motion constants
         LATERAL_SPEED = 4 * MOVEMENT_MULTIPLIER
-        JUMP_SPEED = -5 * 4
+        JUMP_SPEED = -5
         GRAVITY = 0.2 * MOVEMENT_MULTIPLIER
         TERMINAL_VELOCITY = 3 * MOVEMENT_MULTIPLIER
 

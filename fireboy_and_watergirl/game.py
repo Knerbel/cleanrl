@@ -1,5 +1,6 @@
 
 from fireboy_and_watergirl.board import Board
+from fireboy_and_watergirl.box import Box
 from fireboy_and_watergirl.character import Character
 from fireboy_and_watergirl.doors import Doors, FireDoor, WaterDoor
 from fireboy_and_watergirl.gate import Gate
@@ -65,6 +66,30 @@ class Game:
         right_cords = (430, 150)
         self.display.blit(level_select.left_player, left_cords)
         self.display.blit(level_select.right_player, right_cords)
+
+    def try_push_box(self, box: Box, player: Character, board: Board, doors: list[Doors]):
+        """
+        Attempt to push the box if the player is moving into it.
+        """
+        # Get the player's intended movement
+        dx, dy = player.get_movement()
+        if dx == 0 and dy == 0:
+            return  # Player is not moving
+
+        # Predict the box's new position if pushed
+        new_box_rect = box._rect.move(dx, 0)
+
+        # Gather all solid obstacles (blocks + doors)
+        solid_rects = board.get_solid_blocks()
+        for door in doors:
+            solid_rects.append(door._rect)
+
+        # Check if the new box position would collide with any solid object
+        collision = any(new_box_rect.colliderect(solid)
+                        for solid in solid_rects)
+        if not collision:
+            # Move the box
+            box.move(dx, dy)
 
     # def refresh_window(self):
     #     """
@@ -205,7 +230,7 @@ class Game:
     #     #         self.display.blit(
     #     #             star.star_image, (star.star_location[0], star.star_location[1]))
 
-    def move_player(self, board: Board, doors: list[FireDoor | WaterDoor], players: list[Character]):
+    def move_player(self, board: Board, doors: list[FireDoor | WaterDoor], players: list[Character], boxes: list[Box] = []):
         """
         Move player
 
@@ -223,6 +248,8 @@ class Game:
             players::[player object, player object]
                 A list of player objects that contain information on movement
                 and position.
+            boxes::[box object, ...]
+                A list of box objects that can be pushed by players.
         """
         # Get the level boundaries
         level_width = len(board.get_level_data()[0]) * board.CHUNK_SIZE
@@ -235,6 +262,27 @@ class Game:
             collide_blocks = board.get_solid_blocks()
             collision_types = {'top': False,
                                'bottom': False, 'right': False, 'left': False}
+
+            # --- BOX PUSHING LOGIC ---
+            # Try to push a box if moving into it
+            for box in boxes:
+                # Predict player's next rect after movement
+                next_rect = player.rect.move(movement[0], movement[1])
+                if next_rect.colliderect(box._rect):
+                    # Try to push the box in the same direction
+                    self.try_push_box(box, player, board, doors)
+                    # If the box didn't move (blocked), prevent player from moving into it
+                    if next_rect.colliderect(box._rect):
+                        # Block movement in that direction
+                        if movement[0] > 0:  # right
+                            movement = (0, movement[1])
+                        elif movement[0] < 0:  # left
+                            movement = (0, movement[1])
+                        if movement[1] > 0:  # down
+                            movement = (movement[0], 0)
+                        elif movement[1] < 0:  # up
+                            movement = (movement[0], 0)
+            # --- END BOX PUSHING LOGIC ---
 
             # Try moving the player horizontally
             player.rect.x += movement[0]
