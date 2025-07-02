@@ -8,6 +8,8 @@ class Plate:
         self._position = position
         self._type = type
         self._is_pressed = False
+        self.reward_annealing = 1
+
         self.make_rects()
 
     def make_rects(self):

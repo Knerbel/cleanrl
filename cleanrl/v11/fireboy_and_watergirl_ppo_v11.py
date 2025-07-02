@@ -84,6 +84,9 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.video_writer = None
         self.video_recording_every = 1
 
+        self.fb_plate_steps = 0
+        self.wg_plate_steps = 0
+
     def get_action_meanings(self):
         return [
             "NOOP",
@@ -171,6 +174,9 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.times_in_goo = 0
 
         self.games += 1
+
+        self.fb_plate_steps = 0
+        self.wg_plate_steps = 0
 
         return self.state, {}
 
@@ -353,7 +359,7 @@ class FireboyAndWatergirlEnv(gym.Env):
                     if all(not plate._is_pressed for plate in self.plates):
                         rgb_image[y, x] = color_mapping['D']
                     else:
-                        rgb_image[y, x] = color_mapping['D_open']
+                        rgb_image[y, x] = color_mapping[' ']
 
         # Draw End doors
         for door in self.doors:
@@ -503,14 +509,27 @@ class FireboyAndWatergirlEnv(gym.Env):
         #             reward += 500
 
         # Reward for stepping on a plate
-        if self.fire_boy:
-            if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
-                if level_data[fb_y+2][fb_x+1] == 'P':
-                    reward += 50
-        if self.water_girl:
-            if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
-                if level_data[wg_y+2][wg_x+1] == 'P':
-                    reward += 50
+
+        for plate in self.plates:
+            plate_x, plate_y = plate.get_position()
+            plate_x = int(plate_x // 16)
+            plate_y = int(plate_y // 16)
+            for player in [self.fire_boy, self.water_girl]:
+                player_x, player_y = player.get_position()
+                player_x = int(player_x // 16)
+                player_y = int(player_y // 16)
+                if player_x == plate_x and player_y == plate_y - 1:
+                    reward += 50 * plate.reward_annealing
+                    plate.reward_annealing *= 0.975
+
+        # if self.fire_boy:
+        #     if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
+        #         if level_data[fb_y+2][fb_x+1] == 'P':
+        #             reward += 50
+        # if self.water_girl:
+        #     if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
+        #         if level_data[wg_y+2][wg_x+1] == 'P':
+        #             reward += 50
 
         # Reward for collecting stars
         stars = np.array(self.stars)
@@ -525,11 +544,16 @@ class FireboyAndWatergirlEnv(gym.Env):
         doors = np.array(self.doors)
         player_at_door = np.array([door.player_at_door for door in doors])
         reward_given = np.array([door.reward_given for door in doors])
-        for i, door in enumerate(doors):
+        for i, plate in enumerate(doors):
             if player_at_door[i] and not reward_given[i]:
-                reward += 8000
-                door.reward_given = True
+                reward += 4000
+                plate.reward_given = True
                 print('PLAYER AT DOOR!')
+        if all(player_at_door) and not all(reward_given):
+            reward += 16000  # or your chosen value
+            for plate in doors:
+                plate.reward_given = True
+            print('BOTH PLAYERS AT DOORS!')
 
         return reward
 
