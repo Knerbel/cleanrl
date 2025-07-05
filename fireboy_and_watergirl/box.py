@@ -3,7 +3,7 @@ from pygame.locals import *
 
 
 class Box:
-    def __init__(self, position):
+    def __init__(self, position: list[2]):
         """
         Initialize the Box class.
 
@@ -44,7 +44,12 @@ class Box:
         Set a new position for the box and update its rect.
         """
         self.position = new_position
-        self._rect.topleft = new_position
+        self._rect = pygame.Rect(
+            self.position[0],
+            self.position[1],
+            16,
+            16
+        )
 
     def move(self, dx, dy):
         """

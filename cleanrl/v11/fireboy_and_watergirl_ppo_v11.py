@@ -34,8 +34,8 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         self.game = Game()  # Instantiate the Game class
         self.board = None
-        self.fire_boy = None
-        self.water_girl = None
+        self.fire_boy: FireBoy = None
+        self.water_girl: WaterGirl = None
         self.gates = None
         self.doors = None
 
@@ -510,8 +510,8 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Reward for stepping on a plate
 
-        for plate in self.plates:
-            plate_x, plate_y = plate.get_position()
+        for door in self.plates:
+            plate_x, plate_y = door.get_position()
             plate_x = int(plate_x // 16)
             plate_y = int(plate_y // 16)
             for player in [self.fire_boy, self.water_girl]:
@@ -519,8 +519,8 @@ class FireboyAndWatergirlEnv(gym.Env):
                 player_x = int(player_x // 16)
                 player_y = int(player_y // 16)
                 if player_x == plate_x and player_y == plate_y - 1:
-                    reward += 50 * plate.reward_annealing
-                    plate.reward_annealing *= 0.975
+                    reward += 50 * door.reward_annealing
+                    door.reward_annealing *= 0.975
 
         # if self.fire_boy:
         #     if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
@@ -544,15 +544,15 @@ class FireboyAndWatergirlEnv(gym.Env):
         doors = np.array(self.doors)
         player_at_door = np.array([door.player_at_door for door in doors])
         reward_given = np.array([door.reward_given for door in doors])
-        for i, plate in enumerate(doors):
+        for i, door in enumerate(doors):
             if player_at_door[i] and not reward_given[i]:
-                reward += 4000
-                plate.reward_given = True
+                # reward += 4000
+                door.reward_given = True
                 print('PLAYER AT DOOR!')
         if all(player_at_door) and not all(reward_given):
             reward += 16000  # or your chosen value
-            for plate in doors:
-                plate.reward_given = True
+            for door in doors:
+                door.reward_given = True
             print('BOTH PLAYERS AT DOORS!')
 
         return reward
