@@ -35,7 +35,7 @@ class Board:
                              self.CHUNK_SIZE, self.CHUNK_SIZE)
                     )
 
-    def update_doors_solid_state(self, doors_open: bool):
+    def update_doors_solid_state(self, doors_d__open: bool, doors_e__open: bool):
         """
         If doors_open is True, remove all 'D' tiles from _solid_blocks.
         If doors_open is False, ensure all 'D' tiles are in _solid_blocks.
@@ -45,7 +45,7 @@ class Board:
             rect for rect in self._solid_blocks
             if not self._is_door_rect(rect)
         ]
-        if not doors_open:
+        if not doors_d__open:
             # Add all D tiles back as solid blocks
             for y, row in enumerate(self._game_map):
                 for x, tile in enumerate(row):
@@ -54,11 +54,20 @@ class Board:
                                     self.CHUNK_SIZE, self.CHUNK_SIZE)
                         if rect not in self._solid_blocks:
                             self._solid_blocks.append(rect)
+        if not doors_e__open:
+            # Add all E tiles back as solid blocks
+            for y, row in enumerate(self._game_map):
+                for x, tile in enumerate(row):
+                    if tile == 'E':
+                        rect = Rect(x * self.CHUNK_SIZE, y * self.CHUNK_SIZE,
+                                    self.CHUNK_SIZE, self.CHUNK_SIZE)
+                        if rect not in self._solid_blocks:
+                            self._solid_blocks.append(rect)
 
     def _is_door_rect(self, rect):
         x = rect.x // self.CHUNK_SIZE
         y = rect.y // self.CHUNK_SIZE
-        return self._game_map[y][x] == 'D'
+        return self._game_map[y][x] == 'D' or self._game_map[y][x] == 'E'
 
     def get_level_data(self):
         """

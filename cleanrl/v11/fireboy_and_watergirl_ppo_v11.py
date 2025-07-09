@@ -1,5 +1,5 @@
-from typing import Set
 import gymnasium as gym
+import random
 from gymnasium import spaces
 from matplotlib import pyplot as plt
 import numpy as np
@@ -30,7 +30,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         # 4 actions for each character
         self.action_space = spaces.MultiDiscrete([4, 4])
         # Initialize game components
-        self.level = 'level3_plates_and_gates'
+        self.level = 'level4_plates_and_gates'
 
         self.game = Game()  # Instantiate the Game class
         self.board = None
@@ -110,9 +110,26 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.doors: list[FireDoor | WaterDoor] = []
         self.stars: list[Star] = []
 
+        # Collect valid spawn positions
+        valid_y = {2, 6, 10, 14, 18}
+        forbidden_x = {16, 17, 18, 19}
+        min_forbidden_x = min(forbidden_x)
+        max_forbidden_x = max(forbidden_x)
+
+        # Collect valid left/right x for each y
+        left_x_by_y = {y: [] for y in valid_y}
+        right_x_by_y = {y: [] for y in valid_y}
+
         # Parse the level data to dynamically set up components
         for y, row in enumerate(self.board.get_level_data()):
             for x, tile in enumerate(row):
+
+                # Only consider empty tiles at allowed y and x
+                if y in valid_y and tile == ' ':
+                    if x < min_forbidden_x:
+                        left_x_by_y[y].append(x)
+                    elif x > max_forbidden_x:
+                        right_x_by_y[y].append(x)
                 # Assuming 16x16 tiles
                 if tile == 'f':  # Fireboy starting position
                     self.fire_boy = FireBoy((x * 16, y * 16))
@@ -122,22 +139,30 @@ class FireboyAndWatergirlEnv(gym.Env):
                     self.doors.append(FireDoor((x * 16, y * 16)))
                 elif tile == 'B':  # Water door
                     self.doors.append(WaterDoor((x * 16, y * 16)))
-                elif tile == 'D':  # Gate
-                    # Add a generic gate (you can customize this further)
-                    self.gates.append(Gate((x * 16, y * 16), "Foo"))
-                elif tile == 'P':  # Plate A
-                    # Add a plate that controls a gate
-                    self.plates.append(Plate((x * 16, y * 16), "Foo"))
-                # elif tile == 'A':  # Plate B
-                #     self.gates.append(
-                #         FireDoor((x * 16, y * 16), [(x * 16, y * 16)]))
-                # elif tile == 'B':  # Plate B
-                #     self.gates.append(
-                #         WaterDoor((x * 16, y * 16), [(x * 16, y * 16)]))
+
+                elif tile == 'P':  # Fireboy Plate
+                    self.plates.append(Plate((x * 16, y * 16), "fire"))
+                elif tile == 'O':  # Watergirl Plate
+                    self.plates.append(Plate((x * 16, y * 16), "water"))
+
+                elif tile == 'D':  # Fireboy Gate
+                    self.gates.append(Gate((x * 16, y * 16), "fire"))
+                elif tile == 'E':  # Watergirl Gate
+                    self.gates.append(Gate((x * 16, y * 16), "water"))
+
                 elif tile == 'a':  # Gate A
                     self.stars.append(Star([x * 16, y * 16], "fire"))
                 elif tile == 'b':  # Gate B
                     self.stars.append(Star([x * 16, y * 16], "water"))
+
+        # Randomly select two different valid positions for Fireboy and Watergirl
+        possible_y = [y for y in valid_y if left_x_by_y[y] and right_x_by_y[y]]
+        chosen_y = random.choice(possible_y)
+        fireboy_x = random.choice(left_x_by_y[chosen_y])
+        watergirl_x = random.choice(right_x_by_y[chosen_y])
+
+        # self.fire_boy = FireBoy((fireboy_x * 16, chosen_y * 16))
+        # self.water_girl = WaterGirl((watergirl_x * 16, chosen_y * 16))
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -189,8 +214,12 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Update the game state
         self.state = self._get_state()
 
-        doors_open = any(plate._is_pressed for plate in self.plates)
-        self.board.update_doors_solid_state(doors_open)
+        doors_d_open = any(
+            plate._is_pressed for plate in self.plates if plate._type == "fire")
+        doors_e_open = any(
+            plate._is_pressed for plate in self.plates if plate._type == "water")
+
+        self.board.update_doors_solid_state(doors_d_open, doors_e_open)
 
         # Compute reward
         reward = self._compute_reward()
@@ -231,7 +260,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             # Save the last frame as an image
             image_path = os.path.join(
                 self.image_folder,
-                f"episode_{self.games}_final.png"
+                f"episode_{self.games-1}_{current_env}_final.png"
             )
             frame_bgr = cv2.cvtColor(self.state, cv2.COLOR_RGB2BGR)
             frame_bgr = cv2.resize(
@@ -316,7 +345,9 @@ class FireboyAndWatergirlEnv(gym.Env):
             'A': [200, 100, 0],
             'B': [0, 150, 200],
             'P': [150, 150, 150],
+            'O': [150, 150, 150],
             'D': [200, 200, 100],
+            'E': [200, 200, 100],
             'D_open': [180, 140, 20],
         }
         light_blue = [173, 216, 230]
@@ -356,10 +387,15 @@ class FireboyAndWatergirlEnv(gym.Env):
             for x in range(rgb_image.shape[1]):
                 tile = tile_array[y, x]
                 if tile == 'D':
-                    if all(not plate._is_pressed for plate in self.plates):
-                        rgb_image[y, x] = color_mapping['D']
-                    else:
+                    if any(plate._is_pressed for plate in self.plates if plate._type == "fire"):
                         rgb_image[y, x] = color_mapping[' ']
+                    else:
+                        rgb_image[y, x] = color_mapping['D']
+                if tile == 'E':
+                    if any(plate._is_pressed for plate in self.plates if plate._type == "water"):
+                        rgb_image[y, x] = color_mapping[' ']
+                    else:
+                        rgb_image[y, x] = color_mapping['D']
 
         # Draw End doors
         for door in self.doors:
@@ -453,7 +489,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         )
 
     def _compute_reward(self):
-        reward = -10  # Small negative reward for each step
+        reward = 0  # -5  # Small negative reward for each step
 
         level_data = self.board.get_level_data()
 
@@ -495,18 +531,18 @@ class FireboyAndWatergirlEnv(gym.Env):
         new_fb_positions = len(self.fb_visited_positions) - prev_fb_positions
         new_wg_positions = len(self.wg_visited_positions) - prev_wg_positions
         exploration_reward = (new_fb_positions + new_wg_positions)
-        reward += exploration_reward * 5
+        reward += exploration_reward * 10
 
         # Rewards for passing through doors
         # Reward for stepping on a 'D' (gate) tile
-        # if self.fire_boy:
-        #     if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
-        #         if level_data[fb_y+1][fb_x+1] == 'D':
-        #             reward += 500
-        # if self.water_girl:
-        #     if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
-        #         if level_data[wg_y+1][wg_x+1] == 'D':
-        #             reward += 500
+        if self.fire_boy:
+            if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
+                if level_data[fb_y+1][fb_x+1] == 'D':
+                    reward += 200
+        if self.water_girl:
+            if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
+                if level_data[wg_y+1][wg_x+1] == 'D':
+                    reward += 200
 
         # Reward for stepping on a plate
 
@@ -519,7 +555,7 @@ class FireboyAndWatergirlEnv(gym.Env):
                 player_x = int(player_x // 16)
                 player_y = int(player_y // 16)
                 if player_x == plate_x and player_y == plate_y - 1:
-                    reward += 50 * door.reward_annealing
+                    reward += 0 * door.reward_annealing
                     door.reward_annealing *= 0.975
 
         # if self.fire_boy:
@@ -537,7 +573,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         reward_given = np.array([star.reward_given for star in stars])
         for i, star in enumerate(stars):
             if is_collected[i] and not reward_given[i]:
-                reward += 500
+                reward += 1000
                 star.reward_given = True
 
         # Reward for goal
@@ -558,6 +594,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         return reward
 
     def _check_done(self):
+        return False
         return all(door.player_at_door for door in self.doors)
         # End episode if either agent is at a forbidden tile
         level_data = self.board.get_level_data()

@@ -265,59 +265,23 @@ class Game:
 
             # --- BOX PUSHING LOGIC ---
             # Try to push a box if moving into it
-        for box in boxes:
-            # Get player and box tile positions
-            player_tile_x = int(player.rect.x // board.CHUNK_SIZE) - 1 + 1
-            player_tile_y = int(player.rect.y // board.CHUNK_SIZE) - 1
-            box_tile_x = int(box.position[0] // board.CHUNK_SIZE)
-            box_tile_y = int(box.position[1] // board.CHUNK_SIZE)
-
-            # Get intended movement
-            dx = int(movement[0]//16)
-            dy = int(movement[1]//16)
-
-            # print(player_tile_x, player_tile_y, box_tile_x, box_tile_y, dx, dy)
-
-            # Check if player is trying to move into the box (tile-based)
-            if player_tile_x + dx == box_tile_x and player_tile_y + dy == box_tile_y:
-                print('Player moving into box', dx, dy)
-                # Only allow pushing in x direction
-                if dx != 0 and dy == 0:
-                    # Check the tile beyond the box
-                    next_box_tile_x = box_tile_x + dx
-                    next_box_tile_y = box_tile_y
-                    # Get the tile type from the board
-                    level_data = board.get_level_data()
-                    # Make sure the indices are within bounds
-                    if (0 <= next_box_tile_y < len(level_data) and
-                            0 <= next_box_tile_x < len(level_data[0])):
-
-                        old_tile = level_data[next_box_tile_y][box_tile_x]
-                        next_tile = level_data[next_box_tile_y][next_box_tile_x]
-                        print('next_tile', next_tile, 'old_tile', old_tile)
-                        # Check if the next tile is empty (adjust as needed for your game)
-                        if next_tile in [' ']:
-                            # Also check that no other box is in the way
-                            # box_in_way = any(
-                            #     b for b in boxes
-                            #     if (int(b._rect.x // board.CHUNK_SIZE) == next_box_tile_x and
-                            #         int(b._rect.y // board.CHUNK_SIZE) == next_box_tile_y)
-                            # )
-                            # if not box_in_way:
-                            # Move the box
-                            print('move box to ', next_box_tile_x,
-                                  next_box_tile_y)
-                            box.move(dx * board.CHUNK_SIZE, 0)
-                        else:
-                            # Block player movement if box can't be pushed
+            for box in boxes:
+                # Predict player's next rect after movement
+                next_rect = player.rect.move(movement[0], movement[1])
+                if next_rect.colliderect(box._rect):
+                    # Try to push the box in the same direction
+                    self.try_push_box(box, player, board, doors)
+                    # If the box didn't move (blocked), prevent player from moving into it
+                    if next_rect.colliderect(box._rect):
+                        # Block movement in that direction
+                        if movement[0] > 0:  # right
                             movement = (0, movement[1])
-                    else:
-                        print('index out of bound')
-                        # Block player movement if out of bounds
-                        movement = (0, movement[1])
-                else:
-                    # Block player movement if trying to push vertically or diagonally
-                    movement = (0, movement[1])
+                        elif movement[0] < 0:  # left
+                            movement = (0, movement[1])
+                        if movement[1] > 0:  # down
+                            movement = (movement[0], 0)
+                        elif movement[1] < 0:  # up
+                            movement = (movement[0], 0)
             # --- END BOX PUSHING LOGIC ---
 
             # Try moving the player horizontally
@@ -415,13 +379,17 @@ class Game:
             players::[player object, player object]
                 A list of player objects containing information on their location.
         """
-        for player in players:
-            for star in stars:
-                # Check if the player collides with the star
-                if player.rect.colliderect(star._rect):
-                    if player.get_type() == star._player:
-                        # Mark the star as collected
-                        star.collect_star()
+        CHUNK_SIZE = 16  # Make sure this matches your board's chunk size
+        for star in stars:
+            star_x = star._rect.x // CHUNK_SIZE
+            star_y = star._rect.y // CHUNK_SIZE
+            for player in players:
+                player_x = player.rect.x // CHUNK_SIZE
+                player_y = player.rect.y // CHUNK_SIZE
+                # Check if player is exactly one tile above the plate
+                if player_x == star_x and player_y == star_y:
+                    star.is_collected = True
+                    break  # No need to check other players for this plate
 
     def check_for_plates_press(self, plates: list[Plate], players: list[Character]):
         """
@@ -444,7 +412,7 @@ class Game:
                 player_x = player.rect.x // CHUNK_SIZE
                 player_y = player.rect.y // CHUNK_SIZE
                 # Check if player is exactly one tile above the plate
-                if player_x == plate_x and player_y == plate_y - 1:
+                if player_x == plate_x and (player_y == plate_y - 1 or player_y == plate_y - 2 or player_y == plate_y - 2):
                     plate._is_pressed = True
                     break  # No need to check other players for this plate
 
