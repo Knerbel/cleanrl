@@ -30,7 +30,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         # 4 actions for each character
         self.action_space = spaces.MultiDiscrete([4, 4])
         # Initialize game components
-        self.level = 'level4_plates_and_gates'
+        self.level = 'level4c_plates_and_gates'
 
         self.game = Game()  # Instantiate the Game class
         self.board = None
@@ -48,7 +48,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         self._load_level()
 
         self.steps = 0
-        self.max_steps = 128 * 5  # 400
+        self.max_steps = 128 * 4  # 400
         self.envs = 8
 
         self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
@@ -490,6 +490,8 @@ class FireboyAndWatergirlEnv(gym.Env):
 
     def _compute_reward(self):
         reward = 0  # -5  # Small negative reward for each step
+        fb_reward = 0
+        wg_reward = 0
 
         level_data = self.board.get_level_data()
 
@@ -531,18 +533,22 @@ class FireboyAndWatergirlEnv(gym.Env):
         new_fb_positions = len(self.fb_visited_positions) - prev_fb_positions
         new_wg_positions = len(self.wg_visited_positions) - prev_wg_positions
         exploration_reward = (new_fb_positions + new_wg_positions)
-        reward += exploration_reward * 10
+        # reward += exploration_reward * 10
+        fb_reward = new_fb_positions*10
+        wg_reward = new_wg_positions*10
 
         # Rewards for passing through doors
         # Reward for stepping on a 'D' (gate) tile
-        if self.fire_boy:
-            if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
-                if level_data[fb_y+1][fb_x+1] == 'D':
-                    reward += 200
-        if self.water_girl:
-            if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
-                if level_data[wg_y+1][wg_x+1] == 'D':
-                    reward += 200
+        # if self.fire_boy:
+        #     if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
+        #         if level_data[fb_y+1][fb_x+1] == 'D' or level_data[fb_y+1][fb_x+1] == 'E':
+        #             reward += 200
+        #             fb_reward += 200
+        # if self.water_girl:
+        #     if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
+        #         if level_data[wg_y+1][wg_x+1] == 'D' or level_data[wg_y+1][wg_x+1] == 'E':
+        #             reward += 200
+        #             wg_reward += 200
 
         # Reward for stepping on a plate
 
@@ -571,9 +577,23 @@ class FireboyAndWatergirlEnv(gym.Env):
         stars = np.array(self.stars)
         is_collected = np.array([star.is_collected for star in stars])
         reward_given = np.array([star.reward_given for star in stars])
+
+        num_fireboy_stars_collected = sum(
+            star.is_collected and star._player == 'fire' for star in self.stars)
+        num_watergirl_stars_collected = sum(
+            star.is_collected and star._player == 'water' for star in self.stars)
+
         for i, star in enumerate(stars):
             if is_collected[i] and not reward_given[i]:
-                reward += 1000
+                # reward += 1000
+                if star._player == 'fire':
+                    fb_reward += 500 * \
+                        (num_fireboy_stars_collected +
+                         1) * (num_watergirl_stars_collected + 1)
+                if star._player == 'water':
+                    wg_reward += 500 * \
+                        (num_fireboy_stars_collected +
+                         1) * (num_watergirl_stars_collected + 1)
                 star.reward_given = True
 
         # Reward for goal
@@ -584,17 +604,22 @@ class FireboyAndWatergirlEnv(gym.Env):
             if player_at_door[i] and not reward_given[i]:
                 # reward += 4000
                 door.reward_given = True
-                print('PLAYER AT DOOR!')
+                if door._player == 'fire':
+                    print('FIREBOY AT DOOR!')
+                if door._player == 'water':
+                    print('WATERGIRL AT DOOR!')
         if all(player_at_door) and not all(reward_given):
-            reward += 16000  # or your chosen value
+            fb_reward += 8000  # or your chosen value
+            wg_reward += 8000  # or your chosen value
             for door in doors:
                 door.reward_given = True
             print('BOTH PLAYERS AT DOORS!')
 
-        return reward
+        return fb_reward + wg_reward
+        return 0.9*min(fb_reward, wg_reward) + 0.1*max(fb_reward, wg_reward)
 
     def _check_done(self):
-        return False
+        # return False
         return all(door.player_at_door for door in self.doors)
         # End episode if either agent is at a forbidden tile
         level_data = self.board.get_level_data()

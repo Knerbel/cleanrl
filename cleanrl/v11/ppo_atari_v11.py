@@ -33,7 +33,7 @@ import cleanrl.v11.fireboy_and_watergirl_ppo_v11
 
 @dataclass
 class Args:
-    exp_name: str = "level 1 - plates and gates"
+    exp_name: str = "level 4c - plates and gates"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -57,9 +57,9 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 1 * 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 8
+    num_envs: int = 8  # 1,2,4,8,12,16
     """the number of parallel game environments"""
-    num_steps: int = 128 * 5
+    num_steps: int = 128 * 4
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
