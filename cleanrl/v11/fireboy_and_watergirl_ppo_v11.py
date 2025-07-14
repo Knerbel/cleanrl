@@ -34,8 +34,8 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         self.game = Game()  # Instantiate the Game class
         self.board = None
-        self.fire_boy: FireBoy = None
-        self.water_girl: WaterGirl = None
+        self.fire_boy: FireBoy
+        self.water_girl: WaterGirl
         self.gates = None
         self.doors = None
 
@@ -489,9 +489,9 @@ class FireboyAndWatergirlEnv(gym.Env):
         )
 
     def _compute_reward(self):
-        reward = 0  # -5  # Small negative reward for each step
-        fb_reward = 0
-        wg_reward = 0
+        reward = -5  # Small negative reward for each step
+        fb_reward = -0.05
+        wg_reward = -0.05
 
         level_data = self.board.get_level_data()
 
@@ -534,8 +534,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         new_wg_positions = len(self.wg_visited_positions) - prev_wg_positions
         exploration_reward = (new_fb_positions + new_wg_positions)
         # reward += exploration_reward * 10
-        fb_reward = new_fb_positions*10
-        wg_reward = new_wg_positions*10
+        fb_reward = new_fb_positions*0.1
+        wg_reward = new_wg_positions*0.1
 
         # Rewards for passing through doors
         # Reward for stepping on a 'D' (gate) tile
@@ -587,11 +587,11 @@ class FireboyAndWatergirlEnv(gym.Env):
             if is_collected[i] and not reward_given[i]:
                 # reward += 1000
                 if star._player == 'fire':
-                    fb_reward += 500 * \
+                    fb_reward += 0.0625 * \
                         (num_fireboy_stars_collected +
                          1) * (num_watergirl_stars_collected + 1)
                 if star._player == 'water':
-                    wg_reward += 500 * \
+                    wg_reward += 0.0625 * \
                         (num_fireboy_stars_collected +
                          1) * (num_watergirl_stars_collected + 1)
                 star.reward_given = True
@@ -609,8 +609,8 @@ class FireboyAndWatergirlEnv(gym.Env):
                 if door._player == 'water':
                     print('WATERGIRL AT DOOR!')
         if all(player_at_door) and not all(reward_given):
-            fb_reward += 8000  # or your chosen value
-            wg_reward += 8000  # or your chosen value
+            fb_reward += 100  # or your chosen value
+            wg_reward += 100  # or your chosen value
             for door in doors:
                 door.reward_given = True
             print('BOTH PLAYERS AT DOORS!')
