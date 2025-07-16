@@ -644,6 +644,6 @@ class FireboyAndWatergirlEnv(gym.Env):
 
 
 register(
-    id="FireboyAndWatergirl-ppo-v11",
-    entry_point="cleanrl.v11.fireboy_and_watergirl_ppo_v11:FireboyAndWatergirlEnv",
+    id="FireboyAndWatergirl-ppo-v13",
+    entry_point="cleanrl.v13.fireboy_and_watergirl_ppo_v13:FireboyAndWatergirlEnv",
 )
