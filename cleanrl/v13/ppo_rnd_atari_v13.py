@@ -1,5 +1,5 @@
 import random
-import gymnasium as gym  # Change gym to gymnasium
+import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
@@ -17,7 +17,7 @@ import cleanrl.v13.fireboy_and_watergirl_ppo_v13
 
 @dataclass
 class Args:
-    exp_name: str = "PPO_RND"
+    exp_name: str = "PPO_RND TEST"
     """the name of this experiment"""
     env_id: str = "FireboyAndWatergirl-ppo-v13"
     """the id of the environment"""
@@ -65,36 +65,19 @@ class Args:
 
     # Add to runtime calculations
     batch_size: int = 0
+    """the batch size (computed in runtime)"""
     minibatch_size: int = 0
+    """the mini-batch size (computed in runtime)"""
     num_iterations: int = 0
+    """the number of iterations (computed in runtime)"""
+
+# ALGO LOGIC: initialize agent here:
 
 
-class PolicyNetwork(nn.Module):
-    def __init__(self, obs_dim, act_dim):
-        super().__init__()
-        self.actor = nn.Sequential(
-            nn.Linear(obs_dim, 64),
-            nn.Tanh(),
-            nn.Linear(64, 64),
-            nn.Tanh(),
-            nn.Linear(64, act_dim)
-        )
-        self.critic = nn.Sequential(
-            nn.Linear(obs_dim, 64),
-            nn.Tanh(),
-            nn.Linear(64, 64),
-            nn.Tanh(),
-            nn.Linear(64, 1)
-        )
-
-    def get_action(self, x):
-        logits = self.actor(x)
-        dist = Categorical(logits=logits)
-        action = dist.sample()
-        return action, dist.log_prob(action)
-
-    def get_value(self, x):
-        return self.critic(x)
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
 
 
 class Agent(nn.Module):
@@ -115,15 +98,11 @@ class Agent(nn.Module):
         self.actor_wg = layer_init(nn.Linear(512, 4), std=0.01)
         self.critic = layer_init(nn.Linear(512, 1), std=1)
 
-    def get_value(self, x):
-        if len(x.shape) == 3:  # Single observation
-            x = x.unsqueeze(0)
-        x = x.permute(0, 3, 1, 2).float() / 255.0
-        return self.critic(self.network(x))
-
     def get_action_and_value(self, x, action=None):
-        if len(x.shape) == 3:  # Single observation
-            x = x.unsqueeze(0)
+        # Handle input shape for policy
+        if len(x.shape) == 3:  # Single observation (H, W, C)
+            x = x.unsqueeze(0)  # Add batch dimension
+        # Convert from [B, H, W, C] to [B, C, H, W]
         x = x.permute(0, 3, 1, 2).float() / 255.0
 
         hidden = self.network(x)
@@ -144,21 +123,19 @@ class Agent(nn.Module):
         entropy = dist_fb.entropy() + dist_wg.entropy()
         return action, logprob, entropy, self.critic(hidden)
 
+    def get_value(self, x):
+        # Handle input shape for value function
+        if len(x.shape) == 3:  # Single observation (H, W, C)
+            x = x.unsqueeze(0)  # Add batch dimension
+        # Convert from [B, H, W, C] to [B, C, H, W]
+        x = x.permute(0, 3, 1, 2).float() / 255.0
+        return self.critic(self.network(x))
 
-class RNDNetwork(nn.Module):
+
+class RNDModel(nn.Module):
     def __init__(self, envs):
         super().__init__()
         # Same architecture for both target and predictor
-        self.target = nn.Sequential(
-            layer_init(nn.Conv2d(3, 32, 3, stride=2)),
-            nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, 3, stride=2)),
-            nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
-            nn.ReLU(),
-            nn.Flatten(),
-            layer_init(nn.Linear(64 * 3 * 5, 512))
-        )
         self.predictor = nn.Sequential(
             layer_init(nn.Conv2d(3, 32, 3, stride=2)),
             nn.ReLU(),
@@ -170,23 +147,32 @@ class RNDNetwork(nn.Module):
             layer_init(nn.Linear(64 * 3 * 5, 512))
         )
 
-        # Freeze target network
+        # Target network
+        self.target = nn.Sequential(
+            layer_init(nn.Conv2d(3, 32, 3, stride=2)),
+            nn.ReLU(),
+            layer_init(nn.Conv2d(32, 64, 3, stride=2)),
+            nn.ReLU(),
+            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
+            nn.ReLU(),
+            nn.Flatten(),
+            layer_init(nn.Linear(64 * 3 * 5, 512))
+        )
+
+        # target network is not trainable
         for param in self.target.parameters():
             param.requires_grad = False
 
     def forward(self, x):
-        # Convert from (B, H, W, C) to (B, C, H, W)
-        x = x.permute(0, 3, 1, 2)
-        x = x / 255.0
+        # Handle input shape for RND
+        if len(x.shape) == 3:  # Single observation (H, W, C)
+            x = x.unsqueeze(0)  # Add batch dimension
+        # Convert from [B, H, W, C] to [B, C, H, W]
+        x = x.permute(0, 3, 1, 2).float() / 255.0
+
         target_feature = self.target(x)
         predict_feature = self.predictor(x)
         return ((target_feature - predict_feature) ** 2).mean(dim=1)
-
-
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
 
 
 def make_env(env_id, idx, capture_video, run_name):
@@ -208,8 +194,11 @@ def make_env(env_id, idx, capture_video, run_name):
     return thunk
 
 
-def main():
+if __name__ == "__main__":
     args = tyro.cli(Args)
+    args.batch_size = int(args.num_steps)
+    args.minibatch_size = int(args.batch_size // args.num_minibatches)
+    args.num_iterations = args.total_timesteps // args.batch_size
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -217,9 +206,6 @@ def main():
     torch.backends.cudnn.deterministic = True
 
     # Calculate runtime values
-    args.batch_size = int(args.num_steps)
-    args.minibatch_size = int(args.batch_size // args.num_minibatches)
-    args.num_iterations = args.total_timesteps // args.batch_size
 
     # Setup tensorboard
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
@@ -244,7 +230,7 @@ def main():
 
     # Initialize networks
     policy = Agent(envs).to(device)
-    rnd = RNDNetwork(envs).to(device)
+    rnd = RNDModel(envs).to(device)
     optimizer = optim.Adam([
         {'params': policy.parameters(), 'lr': args.learning_rate},
         {'params': rnd.predictor.parameters(), 'lr': args.learning_rate}
@@ -433,7 +419,3 @@ def main():
 
     envs.close()
     writer.close()
-
-
-if __name__ == "__main__":
-    main()

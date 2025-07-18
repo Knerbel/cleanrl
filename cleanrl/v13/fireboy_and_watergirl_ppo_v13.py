@@ -365,12 +365,12 @@ class FireboyAndWatergirlEnv(gym.Env):
             rgb_image[mask] = color_mapping[' ']
 
         # VISUALIZE VISITED TILES AS MAGENTA
-        for (fb_x, fb_y) in self.fb_visited_positions:
-            if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
-                rgb_image[fb_y, fb_x] = light_red
-        for (wg_x, wg_y) in self.wg_visited_positions:
-            if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
-                rgb_image[wg_y, wg_x] = light_blue
+        # for (fb_x, fb_y) in self.fb_visited_positions:
+        #     if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
+        #         rgb_image[fb_y, fb_x] = light_red
+        # for (wg_x, wg_y) in self.wg_visited_positions:
+        #     if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
+        #         rgb_image[wg_y, wg_x] = light_blue
 
         # Draw stars (vectorized)
         for star in self.stars:
@@ -534,8 +534,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         new_wg_positions = len(self.wg_visited_positions) - prev_wg_positions
         exploration_reward = (new_fb_positions + new_wg_positions)
         # reward += exploration_reward * 10
-        fb_reward = new_fb_positions*0.1
-        wg_reward = new_wg_positions*0.1
+        # fb_reward = new_fb_positions*0.1
+        # wg_reward = new_wg_positions*0.1
 
         # Rewards for passing through doors
         # Reward for stepping on a 'D' (gate) tile
