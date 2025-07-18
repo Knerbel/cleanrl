@@ -17,7 +17,7 @@ import cleanrl.v13.fireboy_and_watergirl_ppo_v13
 
 @dataclass
 class Args:
-    exp_name: str = "PPO_RND TEST"
+    exp_name: str = "PPO_RND "
     """the name of this experiment"""
     env_id: str = "FireboyAndWatergirl-ppo-v13"
     """the id of the environment"""
@@ -196,18 +196,10 @@ def make_env(env_id, idx, capture_video, run_name):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    args.batch_size = int(args.num_steps)
+    args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = True
-
-    # Calculate runtime values
-
-    # Setup tensorboard
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
@@ -215,6 +207,11 @@ if __name__ == "__main__":
         "|param|value|\n|-|-|\n%s" % (
             "\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
+
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.backends.cudnn.deterministic = True
 
     device = torch.device(
         "cuda" if torch.cuda.is_available() and args.cuda else "cpu")
@@ -224,9 +221,6 @@ if __name__ == "__main__":
         [make_env(args.env_id, i, args.capture_video, run_name)
          for i in range(args.num_envs)],
     )
-    # Set seeds
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
 
     # Initialize networks
     policy = Agent(envs).to(device)
@@ -245,6 +239,7 @@ if __name__ == "__main__":
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    num_updates = args.total_timesteps // args.batch_size
 
     # Training loop
     obs_env, _ = envs.reset()
@@ -253,15 +248,15 @@ if __name__ == "__main__":
     global_step = 0
     start_time = time.time()
 
-    for iteration in range(1, args.num_iterations + 1):
+    for iteration in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
-            frac = 1.0 - (iteration - 1.0) / args.num_iterations
+            frac = 1.0 - (iteration - 1.0) / num_updates
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 
         for step in range(args.num_steps):
-            global_step += args.num_envs
+            global_step += 1 * args.num_envs
 
             # Convert observation to tensor
             obs[step] = torch.FloatTensor(obs_env).to(device)
