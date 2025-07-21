@@ -17,8 +17,10 @@ import cleanrl.v13.fireboy_and_watergirl_ppo_v13
 
 @dataclass
 class Args:
-    exp_name: str = "PPO_RND "
+    exp_name: str = "PPO_RND Preload trained model"
     """the name of this experiment"""
+    seed: int = 1
+    """seed of the experiment"""
     env_id: str = "FireboyAndWatergirl-ppo-v13"
     """the id of the environment"""
     total_timesteps: int = 2000_000
@@ -44,8 +46,6 @@ class Args:
     max_grad_norm: float = 0.5
     """the maximum norm for the gradient clipping"""
     rnd_reward_scale: float = 0.1
-    seed: int = 1
-    """seed of the experiment"""
     cuda: bool = True
     """if toggled, cuda will be enabled by default"""
     track: bool = False
@@ -223,10 +223,13 @@ if __name__ == "__main__":
     )
 
     # Initialize networks
-    policy = Agent(envs).to(device)
+    agent = Agent(envs).to(device)
+    agent.load_state_dict(torch.load("best_model.pt", map_location=device))
+    agent.eval()
+
     rnd = RNDModel(envs).to(device)
     optimizer = optim.Adam([
-        {'params': policy.parameters(), 'lr': args.learning_rate},
+        {'params': agent.parameters(), 'lr': args.learning_rate},
         {'params': rnd.predictor.parameters(), 'lr': args.learning_rate}
     ])
 
@@ -248,6 +251,8 @@ if __name__ == "__main__":
     global_step = 0
     start_time = time.time()
 
+    best_return = -float('inf')  # Add this before the training loop
+
     for iteration in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -263,7 +268,7 @@ if __name__ == "__main__":
 
             # Get actions and values
             with torch.no_grad():
-                action, logprob, _, value = policy.get_action_and_value(
+                action, logprob, _, value = agent.get_action_and_value(
                     obs[step])
 
             # Execute action in environment
@@ -297,6 +302,11 @@ if __name__ == "__main__":
                         writer.add_scalar(
                             "charts/times_in_goo", info["times_in_goo"], global_step)
 
+                        episode_return = info["episode"]["r"]
+                        if episode_return > best_return:
+                            best_return = episode_return
+                            torch.save(agent.state_dict(), f"best_model.pt")
+
             # Calculate intrinsic reward
             with torch.no_grad():
                 intrinsic_reward = rnd(obs[step])
@@ -321,7 +331,7 @@ if __name__ == "__main__":
 
         # PPO update
         with torch.no_grad():
-            next_value = policy.get_value(
+            next_value = agent.get_value(
                 torch.FloatTensor(next_obs).to(device)).reshape(1, -1)
             advantages = torch.zeros_like(rewards).to(device)
             lastgaelam = 0
@@ -361,7 +371,7 @@ if __name__ == "__main__":
                 mb_inds = indices[start:end]
 
                 # Get minibatch data
-                _, newlogprob, entropy, newvalue = policy.get_action_and_value(
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(
                     b_obs[mb_inds],
                     b_actions[mb_inds]
                 )
@@ -392,7 +402,7 @@ if __name__ == "__main__":
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(
-                    policy.parameters(), args.max_grad_norm)
+                    agent.parameters(), args.max_grad_norm)
                 nn.utils.clip_grad_norm_(
                     rnd.predictor.parameters(), args.max_grad_norm)
                 optimizer.step()
