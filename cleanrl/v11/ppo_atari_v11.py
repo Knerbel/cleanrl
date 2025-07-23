@@ -1,4 +1,5 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_ataripy
+from collections import deque
 import os
 import random
 import time
@@ -33,7 +34,7 @@ import cleanrl.v11.fireboy_and_watergirl_ppo_v11
 
 @dataclass
 class Args:
-    exp_name: str = "level 4c - plates and gates"
+    exp_name: str = "PPO_atari_v11 pretrained before learning model"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -221,6 +222,10 @@ if __name__ == "__main__":
     #                   gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs).to(device)
+    agent.load_state_dict(torch.load(
+        "checkpoint 50.pt", map_location=device))
+    agent.eval()  # agent.eval() doesnt do much
+
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # dummy_input = torch.randn(1, 4, 23, 34, 3).to(device)
@@ -252,6 +257,11 @@ if __name__ == "__main__":
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
+    n = 40  # window size for averaging
+    recent_returns = deque(maxlen=n)
+    best_avg_return = -float('inf')
+    best_return = -float('inf')
+
     for iteration in range(1, args.num_iterations + 1):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -261,27 +271,6 @@ if __name__ == "__main__":
 
         for step in range(0, args.num_steps):
             global_step += args.num_envs
-
-            # Inside the training loop, before calling the agent
-            if (global_step//args.num_envs) % 100 == 0:  # Save every 1000 steps
-                # Convert the observation tensor to a NumPy array
-                # Take the first environment's observation
-                obs_image = next_obs[0].cpu().numpy()
-
-                # Reshape and normalize the observation for visualization
-                # Convert from (C, H, W) to (H, W, C)
-                obs_image = obs_image[0]  # .transpose(1, 2, 0)
-                # Normalize to [0, 1] for visualization
-                obs_image = obs_image / 255.0
-
-                # Plot and save the image
-                plt.figure(figsize=(10, 3))
-
-                plt.imshow(obs_image, cmap="gray")
-                plt.axis("off")
-                plt.savefig(
-                    f"agent_input_step.png", bbox_inches="tight", pad_inches=0)
-                plt.close()
 
             obs[step] = next_obs
             dones[step] = next_done
@@ -330,6 +319,25 @@ if __name__ == "__main__":
                             "charts/times_in_fire", info["times_in_fire"], global_step)
                         writer.add_scalar(
                             "charts/times_in_goo", info["times_in_goo"], global_step)
+
+                        episode_return = info["episode"]["r"]
+
+                        if episode_return > best_return:
+                            best_return = episode_return
+                            torch.save(agent.state_dict(), f"best_model.pt")
+
+                        recent_returns.append(episode_return)
+                        if len(recent_returns) == n:
+                            avg_return = sum(recent_returns) / n
+                            if avg_return > best_avg_return:
+                                best_avg_return = avg_return
+                                torch.save(agent.state_dict(),
+                                           f"best_n_model.pt")
+                        if iteration % 5 == 0:
+                            print(
+                                f"Iteration {iteration}/{args.num_iterations}")
+                            torch.save(agent.state_dict(),
+                                       f"checkpoint {iteration}.pt")
 
         # bootstrap value if not done
         with torch.no_grad():

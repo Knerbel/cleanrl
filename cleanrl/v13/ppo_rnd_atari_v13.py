@@ -7,17 +7,19 @@ import torch.optim as optim
 from torch.distributions import Categorical
 from dataclasses import dataclass
 import tyro
-import time
 from torch.utils.tensorboard import SummaryWriter
 import time
+from collections import deque
 
 
 import cleanrl.v13.fireboy_and_watergirl_ppo_v13
 
+best_avg_return = -float('inf')
+
 
 @dataclass
 class Args:
-    exp_name: str = "PPO_RND Preload trained model"
+    exp_name: str = "PPO_RND_ATARI_v13_best_model"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -224,8 +226,9 @@ if __name__ == "__main__":
 
     # Initialize networks
     agent = Agent(envs).to(device)
-    agent.load_state_dict(torch.load("best_model.pt", map_location=device))
-    agent.eval()
+    agent.load_state_dict(torch.load(
+        "checkpoint 145.pt", map_location=device))
+    agent.eval()  # agent.eval() doesnt do much
 
     rnd = RNDModel(envs).to(device)
     optimizer = optim.Adam([
@@ -251,7 +254,10 @@ if __name__ == "__main__":
     global_step = 0
     start_time = time.time()
 
-    best_return = -float('inf')  # Add this before the training loop
+    n = 40  # window size for averaging
+    recent_returns = deque(maxlen=n)
+    best_avg_return = -float('inf')
+    best_return = -float('inf')
 
     for iteration in range(1, num_updates + 1):
         # Annealing the rate if instructed to do so.
@@ -303,9 +309,23 @@ if __name__ == "__main__":
                             "charts/times_in_goo", info["times_in_goo"], global_step)
 
                         episode_return = info["episode"]["r"]
+
                         if episode_return > best_return:
                             best_return = episode_return
                             torch.save(agent.state_dict(), f"best_model.pt")
+
+                        recent_returns.append(episode_return)
+                        if len(recent_returns) == n:
+                            avg_return = sum(recent_returns) / n
+                            if avg_return > best_avg_return:
+                                best_avg_return = avg_return
+                                torch.save(agent.state_dict(),
+                                           f"best_n_model.pt")
+                        if iteration % 5 == 0:
+                            print(
+                                f"Iteration {iteration}/{args.num_iterations}")
+                            torch.save(agent.state_dict(),
+                                       f"checkpoint {iteration}.pt")
 
             # Calculate intrinsic reward
             with torch.no_grad():
