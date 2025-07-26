@@ -30,7 +30,11 @@ class FireboyAndWatergirlEnv(gym.Env):
         # 4 actions for each character
         self.action_space = spaces.MultiDiscrete([4, 4])
         # Initialize game components
-        self.level = 'level4d_plates_and_gates'
+        self.levels = [
+            'level4c_plates_and_gates',
+            'level4d_plates_and_gates',
+            'level4e_plates_and_gates',
+        ]
 
         self.game = Game()  # Instantiate the Game class
         self.board = None
@@ -103,8 +107,9 @@ class FireboyAndWatergirlEnv(gym.Env):
         # with open('./fireboy_and_watergirl/data/'+self.level+'.txt', 'r') as file:
         #     level_data = [line.strip().split(',') for line in file.readlines()]
 
+        level = random.choice(self.levels)
         # Initialize game components
-        self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
+        self.board = Board('./fireboy_and_watergirl/data/'+level+'.txt')
         self.gates: list[Gate] = []
         self.plates: list[Plate] = []
         self.doors: list[FireDoor | WaterDoor] = []
@@ -644,6 +649,6 @@ class FireboyAndWatergirlEnv(gym.Env):
 
 
 register(
-    id="FireboyAndWatergirl-ppo-v11",
-    entry_point="cleanrl.v11.fireboy_and_watergirl_ppo_v11:FireboyAndWatergirlEnv",
+    id="FireboyAndWatergirl-ppo-v11b",
+    entry_point="cleanrl.v11.fireboy_and_watergirl_ppo_v11b:FireboyAndWatergirlEnv",
 )
