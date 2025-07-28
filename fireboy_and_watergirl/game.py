@@ -388,8 +388,9 @@ class Game:
                 player_y = player.rect.y // CHUNK_SIZE
                 # Check if player is exactly one tile above the plate
                 if player_x == star_x and player_y == star_y:
-                    star.is_collected = True
-                    break  # No need to check other players for this plate
+                    if player.get_type() == star._player:
+                        star.is_collected = True
+                        break  # No need to check other players for this plate
 
     def check_for_plates_press(self, plates: list[Plate], players: list[Character]):
         """
