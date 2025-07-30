@@ -216,7 +216,7 @@ if __name__ == "__main__":
 
     agent = Agent(envs).to(device)
     # agent.load_state_dict(torch.load(
-    #     "checkpoint 420.pt", map_location=device))
+    #     "best_model.pt", map_location=device))
     # agent.eval()  # agent.eval() doesnt do much
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
