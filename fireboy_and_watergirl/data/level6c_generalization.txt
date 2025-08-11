@@ -2,7 +2,7 @@ S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S
 S, , , , , , , , , , , , , , , , , , ,S
 S, ,f,w, , , , , , , , , , , , , , , ,S
 S, , , , , , , , , , , , , , , , , , ,S
-S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S, , ,S
+S,S,S,S,S,W,W,W,S,S,S,L,L,L,S,S,S, , ,S
 S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S, , ,S
 S, , , , , , , , , , , , , , , , , , ,S
 S, , , , , , , , , , , , , , , , , , ,S

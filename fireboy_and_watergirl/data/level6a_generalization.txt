@@ -15,6 +15,6 @@ S,S,S,S,S,S,S,S,S,S,S,S,S,S, , ,S,S,S,S
 S, , , , , , , , , , , , , , , , , , ,S
 S, , ,A, , , , , , , , , , , , , ,B, ,S
 S, , , , , , , , , , , , , , , , , , ,S
-S,S,S,S,S,G,G,G,S,S,S,S,S,S,S,S,S,S,S,S
+S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S
 S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S
 S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S
