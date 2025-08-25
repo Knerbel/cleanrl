@@ -15,7 +15,6 @@ import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
-
 from cleanrl_utils.buffers import ReplayBuffer
 
 import cleanrl.v17.fireboy_and_watergirl_ppo_v17
@@ -23,7 +22,7 @@ import cleanrl.v17.fireboy_and_watergirl_ppo_v17
 
 @dataclass
 class Args:
-    exp_name: str = "SAC_atari_v17_level6e"
+    exp_name: str = "SAC_atari_v17_TEST_RUN"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -71,7 +70,7 @@ class Args:
     """coefficient for scaling the autotune entropy target"""
 
 
-def make_env(env_id, idx, capture_video, run_name):
+def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
@@ -80,8 +79,9 @@ def make_env(env_id, idx, capture_video, run_name):
             env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = gym.wrappers.ResizeObservation(env, (18, 18))
-        # env = gym.wrappers.GrayScaleObservation(env)
         env = gym.wrappers.FrameStack(env, 4)
+
+        env.action_space.seed(seed)
         return env
 
     return thunk
@@ -106,35 +106,36 @@ class SoftQNetwork(nn.Module):
         height = envs.single_observation_space.shape[1]
         width = envs.single_observation_space.shape[2]
         self.embedding = nn.Embedding(num_tile_types, embedding_dim)
-        self.cnn = nn.Sequential(
-            nn.Conv2d(frames * embedding_dim, 32, 3, stride=2),
+        self.conv = nn.Sequential(
+            layer_init(nn.Conv2d(frames * embedding_dim,
+                       32, kernel_size=3, stride=2)),
             nn.ReLU(),
-            nn.Conv2d(32, 64, 3, stride=2),
+            layer_init(nn.Conv2d(32, 64, kernel_size=3, stride=2)),
             nn.ReLU(),
-            nn.Conv2d(64, 64, 3, stride=1),
-            nn.ReLU(),
+            layer_init(nn.Conv2d(64, 64, kernel_size=3, stride=1)),
             nn.Flatten(),
         )
+
         with torch.inference_mode():
             dummy = torch.zeros(1, frames, height, width)
             dummy = self.embedding(dummy.long())
             dummy = dummy.permute(0, 1, 4, 2, 3).reshape(
                 1, frames * embedding_dim, height, width)
-            out_dim = self.cnn(dummy).shape[1]
-        self.fc = nn.Linear(out_dim, 128)
-        self.head1 = nn.Linear(128, 4)
-        self.head2 = nn.Linear(128, 4)
+            output_dim = self.conv(dummy).shape[1]
+        self.fc1 = layer_init(nn.Linear(output_dim, 512))
+        self.head1 = layer_init(nn.Linear(512, 4))
+        self.head2 = layer_init(nn.Linear(512, 4))
 
     def forward(self, x):
         # x: (batch, 4, 18, 18)
         x = self.embedding(x.long())
         x = x.permute(0, 1, 4, 2, 3).reshape(
             x.shape[0], -1, x.shape[2], x.shape[3])
-        x = self.cnn(x)
-        x = self.fc(x)
+        x = F.relu(self.conv(x))
+        x = F.relu(self.fc1(x))
         q1 = self.head1(x)
         q2 = self.head2(x)
-        return q1, q2  # Each: (batch, 4)
+        return q1, q2
 
 
 class Actor(nn.Module):
@@ -146,48 +147,50 @@ class Actor(nn.Module):
         height = envs.single_observation_space.shape[1]
         width = envs.single_observation_space.shape[2]
         self.embedding = nn.Embedding(num_tile_types, embedding_dim)
-        self.cnn = nn.Sequential(
-            nn.Conv2d(frames * embedding_dim, 32, 3, stride=2),
+        self.conv = nn.Sequential(
+            layer_init(nn.Conv2d(frames * embedding_dim,
+                       32, kernel_size=3, stride=2)),
             nn.ReLU(),
-            nn.Conv2d(32, 64, 3, stride=2),
+            layer_init(nn.Conv2d(32, 64, kernel_size=3, stride=2)),
             nn.ReLU(),
-            nn.Conv2d(64, 64, 3, stride=1),
-            nn.ReLU(),
+            layer_init(nn.Conv2d(64, 64, kernel_size=3, stride=1)),
             nn.Flatten(),
         )
+
         with torch.inference_mode():
             dummy = torch.zeros(1, frames, height, width)
             dummy = self.embedding(dummy.long())
             dummy = dummy.permute(0, 1, 4, 2, 3).reshape(
                 1, frames * embedding_dim, height, width)
-            out_dim = self.cnn(dummy).shape[1]
-        self.fc = nn.Linear(out_dim, 128)
-        self.head1 = nn.Linear(128, 4)
-        self.head2 = nn.Linear(128, 4)
+            output_dim = self.conv(dummy).shape[1]
+
+        self.fc1 = layer_init(nn.Linear(output_dim, 512))
+        self.fc_logits1 = layer_init(nn.Linear(512, 4))
+        self.fc_logits2 = layer_init(nn.Linear(512, 4))
 
     def forward(self, x):
         # x: (batch, 4, 18, 18)
         x = self.embedding(x.long())
         x = x.permute(0, 1, 4, 2, 3).reshape(
             x.shape[0], -1, x.shape[2], x.shape[3])
-        x = self.cnn(x)
-        x = self.fc(x)
-        q1 = self.head1(x)
-        q2 = self.head2(x)
+        x = self.conv(x)
+        x = self.fc1(x)
+        q1 = self.fc_logits1(x)
+        q2 = self.fc_logits2(x)
         return q1, q2  # Each: (batch, 4)
 
     def get_action(self, x):
         logits1, logits2 = self(x)
-        dist1 = Categorical(logits=logits1)
-        dist2 = Categorical(logits=logits2)
-        action1 = dist1.sample()
-        action2 = dist2.sample()
+        policy_dist1 = Categorical(logits=logits1)
+        policy_dist2 = Categorical(logits=logits2)
+        action1 = policy_dist1.sample()
+        action2 = policy_dist2.sample()
         actions = torch.stack([action1, action2], dim=1)
-        log_prob1 = dist1.log_prob(action1)
-        log_prob2 = dist2.log_prob(action2)
+        log_prob1 = F.log_softmax(logits1, dim=1)
+        log_prob2 = F.log_softmax(logits2, dim=1)
         log_prob = torch.stack([log_prob1, log_prob2], dim=1)
-        probs1 = dist1.probs
-        probs2 = dist2.probs
+        probs1 = policy_dist1.probs
+        probs2 = policy_dist2.probs
         return actions, log_prob, (probs1, probs2)
 
 
@@ -224,10 +227,7 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, 0, args.capture_video, run_name)])
-    # assert isinstance(envs.single_action_space,
-    #                   gym.spaces.Discrete), "only discrete action space is supported"
-
+        [make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
     n = 40  # window size for averaging
     recent_returns = deque(maxlen=n)
     best_avg_return = -float('inf')
@@ -248,11 +248,9 @@ if __name__ == "__main__":
 
     # Automatic entropy tuning
     if args.autotune:
-        target_entropy = -args.target_entropy_scale * torch.log(
-            1 / torch.tensor(envs.single_action_space.nvec,
-                             dtype=torch.float32)
-        )  # shape: [2]
-        # If you want a scalar per head, keep as is and index per head below
+        target_entropy = -args.target_entropy_scale * \
+            torch.log(1 / torch.tensor(4)
+                      ).to(device)  # Single scalar target for both heads
         log_alpha = torch.zeros(1, requires_grad=True, device=device)
         alpha = log_alpha.exp().item()
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr, eps=1e-4)
@@ -271,7 +269,6 @@ if __name__ == "__main__":
     obs, _ = envs.reset(seed=args.seed)
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
-
         if global_step < args.learning_starts:
             actions = np.array([envs.single_action_space.sample()
                                for _ in range(envs.num_envs)])
@@ -287,6 +284,8 @@ if __name__ == "__main__":
         if "final_info" in infos:
             for info in infos["final_info"]:
                 # Skip the envs that are not done
+                if "episode" not in info:
+                    continue
                 print(
                     f"global_step={global_step}, episodic_return={info['episode']['r']}")
                 print("SPS:", int(global_step / (time.time() - start_time)))
@@ -342,33 +341,39 @@ if __name__ == "__main__":
             if global_step % args.update_frequency == 0:
                 data = rb.sample(args.batch_size)
                 # CRITIC training
+                # CRITIC training
                 with torch.no_grad():
                     _, next_state_log_pi, next_state_action_probs = actor.get_action(
                         data.next_observations)
-                    qf1_next_target = qf1_target(data.next_observations)
-                    qf2_next_target = qf2_target(data.next_observations)
-                    # Unpack tuples
-                    qf1_next_target_1, qf1_next_target_2 = qf1_next_target
-                    qf2_next_target_1, qf2_next_target_2 = qf2_next_target
-                    # Unpack action probs and log_pi
-                    probs1, probs2 = next_state_action_probs
-                    log_pi1, log_pi2 = next_state_log_pi[:,
-                                                         0], next_state_log_pi[:, 1]
-                    # Compute min Q for each head
-                    min_qf_next_target_1 = probs1 * \
-                        (torch.min(qf1_next_target_1, qf2_next_target_1) -
-                         alpha * log_pi1.unsqueeze(1))
-                    min_qf_next_target_2 = probs2 * \
-                        (torch.min(qf1_next_target_2, qf2_next_target_2) -
-                         alpha * log_pi2.unsqueeze(1))
-                    # Sum over actions for each head, then sum over heads
-                    min_qf_next_target = min_qf_next_target_1.sum(
-                        dim=1) + min_qf_next_target_2.sum(dim=1)
-                    next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * \
-                        args.gamma * (min_qf_next_target)
+                    qf1_next_target_1, qf1_next_target_2 = qf1_target(
+                        data.next_observations)  # [batch, 4] each
+                    qf2_next_target_1, qf2_next_target_2 = qf2_target(
+                        data.next_observations)  # [batch, 4] each
 
-                # use Q-values only for the taken actions
-                # ...existing code...
+                    # Get next state action probabilities
+                    # [batch, 4] each
+                    action_probs1, action_probs2 = next_state_action_probs
+
+                    # Compute Q-values for next state
+                    min_qf_next_target_1 = torch.min(
+                        qf1_next_target_1, qf2_next_target_1)  # [batch, 4]
+                    min_qf_next_target_2 = torch.min(
+                        qf1_next_target_2, qf2_next_target_2)  # [batch, 4]
+
+                    # Weight Q-values by action probabilities
+                    expected_next_q1 = (
+                        action_probs1 * min_qf_next_target_1).sum(dim=1)  # [batch]
+                    expected_next_q2 = (
+                        action_probs2 * min_qf_next_target_2).sum(dim=1)  # [batch]
+
+                    # Combine both heads
+                    expected_next_q = expected_next_q1 + \
+                        expected_next_q2  # [batch]
+
+                    # Final Bellman backup
+                    next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * \
+                        args.gamma * expected_next_q
+
                 qf1_values_1, qf1_values_2 = qf1(data.observations)
                 qf2_values_1, qf2_values_2 = qf2(data.observations)
                 # data.actions: [batch, 2]
@@ -381,7 +386,6 @@ if __name__ == "__main__":
                 # Combine both heads (sum or mean, depending on your design)
                 qf1_a_values = qf1_a_values_1 + qf1_a_values_2
                 qf2_a_values = qf2_a_values_1 + qf2_a_values_2
-                # ...existing code...
 
                 qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
                 qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
@@ -396,24 +400,9 @@ if __name__ == "__main__":
                 with torch.no_grad():
                     qf1_values_1, qf1_values_2 = qf1(data.observations)
                     qf2_values_1, qf2_values_2 = qf2(data.observations)
-                    # data.actions: [batch, 2]
-                    actions1 = data.actions[:, 0].unsqueeze(1)
-                    actions2 = data.actions[:, 1].unsqueeze(1)
-                    qf1_a_values_1 = qf1_values_1.gather(
-                        1, actions1).squeeze(1)
-                    qf1_a_values_2 = qf1_values_2.gather(
-                        1, actions2).squeeze(1)
-                    qf2_a_values_1 = qf2_values_1.gather(
-                        1, actions1).squeeze(1)
-                    qf2_a_values_2 = qf2_values_2.gather(
-                        1, actions2).squeeze(1)
-                    # Combine both heads (sum or mean, depending on your design)
-                    qf1_a_values = qf1_a_values_1 + qf1_a_values_2
-                    qf2_a_values = qf2_a_values_1 + qf2_a_values_2
-
                     min_qf_values = torch.min(qf1_values_1, qf2_values_2)
                 # no need for reparameterization, the expectation can be calculated for discrete actions
-                probs1, probs2 = action_probs  # [batch, 4] each
+                action_probs1, action_probs2 = action_probs  # [batch, 4] each
                 log_pi1, log_pi2 = log_pi[:, 0], log_pi[:, 1]  # [batch]
                 # Use min Q-values for each head
                 min_qf_values_1 = torch.min(
@@ -422,9 +411,9 @@ if __name__ == "__main__":
                     qf1_values_2, qf2_values_2)  # [batch, 4]
                 # Compute actor loss for each head
                 actor_loss_1 = (
-                    probs1 * ((alpha * log_pi1.unsqueeze(1)) - min_qf_values_1)).sum(dim=1)
+                    action_probs1 * ((alpha * log_pi1.unsqueeze(1)) - min_qf_values_1)).sum(dim=1)
                 actor_loss_2 = (
-                    probs2 * ((alpha * log_pi2.unsqueeze(1)) - min_qf_values_2)).sum(dim=1)
+                    action_probs2 * ((alpha * log_pi2.unsqueeze(1)) - min_qf_values_2)).sum(dim=1)
                 # Combine losses (mean over batch and heads)
                 actor_loss = (actor_loss_1 + actor_loss_2).mean()
 
@@ -434,13 +423,15 @@ if __name__ == "__main__":
 
                 if args.autotune:
                     # reuse action probabilities for temperature loss
-                    probs1, probs2 = action_probs  # [batch, 4] each
+                    # [batch, 4] each
+                    action_probs1, action_probs2 = action_probs
                     log_pi1, log_pi2 = log_pi[:, 0], log_pi[:, 1]  # [batch]
-                    # Compute alpha loss for each head
-                    alpha_loss_1 = (probs1.detach(
-                    ) * (-log_alpha.exp() * (log_pi1.unsqueeze(1) + target_entropy[0]).detach())).sum(dim=1)
-                    alpha_loss_2 = (probs2.detach(
-                    ) * (-log_alpha.exp() * (log_pi2.unsqueeze(1) + target_entropy[1]).detach())).sum(dim=1)
+
+                    # Use same target entropy for both heads
+                    alpha_loss_1 = (action_probs1.detach() *
+                                    (-log_alpha.exp() * (log_pi1.unsqueeze(1) + target_entropy).detach())).sum(dim=1)
+                    alpha_loss_2 = (action_probs2.detach() *
+                                    (-log_alpha.exp() * (log_pi2.unsqueeze(1) + target_entropy).detach())).sum(dim=1)
                     alpha_loss = (alpha_loss_1 + alpha_loss_2).mean()
 
                     a_optimizer.zero_grad()
@@ -458,6 +449,8 @@ if __name__ == "__main__":
                         args.tau * param.data + (1 - args.tau) * target_param.data)
 
             if global_step % 100 == 0:
+                # Should not be too close to 0
+                print(f"Current alpha: {alpha}")
                 writer.add_scalar("losses/qf1_values",
                                   qf1_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf2_values",
