@@ -28,7 +28,7 @@ import cleanrl.v17.fireboy_and_watergirl_sac_v17
 
 @dataclass
 class Args:
-    exp_name: str = "SAC_atari_single_action_space"
+    exp_name: str = "SAC_atari_single_action_space_level8_exploration"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -273,6 +273,22 @@ if __name__ == "__main__":
                                   info["episode"]["r"], global_step)
                 writer.add_scalar("charts/episodic_length",
                                   info["episode"]["l"], global_step)
+                writer.add_scalar(
+                    "charts/stars_collected", info["stars_collected"], global_step)
+                writer.add_scalar(
+                    "charts/zero_reward", info["zero_reward"], global_step)
+                writer.add_scalar(
+                    "charts/unique_positions", info["unique_positions"], global_step)
+                writer.add_scalar(
+                    "charts/finished", info["finished"], global_step)
+                writer.add_scalar(
+                    "charts/players_at_door", info["players_at_door"], global_step)
+                writer.add_scalar(
+                    "charts/times_in_water", info["times_in_water"], global_step)
+                writer.add_scalar(
+                    "charts/times_in_fire", info["times_in_fire"], global_step)
+                writer.add_scalar(
+                    "charts/times_in_goo", info["times_in_goo"], global_step)
                 break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
