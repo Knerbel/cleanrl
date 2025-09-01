@@ -104,7 +104,7 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Initialize game components
         self.level = random.choice(
-            ['level8a'])
+            ['level8_exploration'])
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
         self.gates: list[Gate] = []
         self.plates: list[Plate] = []

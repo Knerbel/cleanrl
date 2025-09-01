@@ -30,7 +30,6 @@ class FireboyAndWatergirlEnv(gym.Env):
         # 4 actions for each character
         self.action_space = spaces.MultiDiscrete([4, 4])
         # Initialize game components
-        self.level = 'level6e_generalization'
 
         self.game = Game()  # Instantiate the Game class
         self.board = None
@@ -104,7 +103,7 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Initialize game components
         self.level = random.choice(
-            ['level6e_generalization'])
+            ['level8_exploration'])
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
         self.gates: list[Gate] = []
         self.plates: list[Plate] = []
@@ -484,6 +483,8 @@ class FireboyAndWatergirlEnv(gym.Env):
         Update the game state based on the discrete action.
         """
 
+        # print(action)
+
         # Check if action is an array-like (for MultiDiscrete) or a single int
         if isinstance(action, (list, tuple, np.ndarray)) and len(action) == 2:
             fireboy_action = 3
@@ -541,13 +542,13 @@ class FireboyAndWatergirlEnv(gym.Env):
         )
 
     def _compute_reward(self):
-        fb_reward = -0.05
-        wg_reward = -0.05
+        fb_reward = -0.005
+        wg_reward = -0.005
 
         false_liquid_punishment = -0.2 / 100
-        exploration_reward = 0.1
-        star_reward = 100
-        finish_reward = 400
+        exploration_reward = 0.01
+        star_reward = 5
+        finish_reward = 10
 
         level_data = self.board.get_level_data()
 

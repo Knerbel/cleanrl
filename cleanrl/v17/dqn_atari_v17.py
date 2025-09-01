@@ -21,7 +21,7 @@ import cleanrl.v17.fireboy_and_watergirl_ppo_v17
 
 @dataclass
 class Args:
-    exp_name: str = "DQN_atari_v17_level6a"
+    exp_name: str = "DQN_atari_v17_level8_exploration"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -98,8 +98,6 @@ class QNetwork(nn.Module):
         num_tile_types = int(env.single_observation_space.high.max()) + 1
         embedding_dim = 8
         frames = env.single_observation_space.shape[0]
-        height = env.single_observation_space.shape[1]
-        width = env.single_observation_space.shape[2]
         self.embedding = nn.Embedding(num_tile_types, embedding_dim)
         self.network = nn.Sequential(
             nn.Conv2d(frames * embedding_dim, 32, 3, stride=2),
@@ -110,17 +108,19 @@ class QNetwork(nn.Module):
             nn.ReLU(),
             nn.Flatten(),
         )
-        with torch.inference_mode():
-            dummy = torch.zeros(1, frames, height, width)
-            dummy = self.embedding(dummy.long())
-            dummy = dummy.permute(0, 1, 4, 2, 3).reshape(
-                1, frames * embedding_dim, height, width)
-            out_dim = self.network(dummy).shape[1]
+        # dummy = torch.zeros(1, frames, height, width)
+        # dummy = self.embedding(dummy.long())
+        # dummy = dummy.permute(0, 1, 4, 2, 3).reshape(
+        #     1, frames * embedding_dim, height, width)
+        # out_dim = self.network(dummy).shape[1]
+        # print(out_dim)
+
+        # Feature extraction
         self.fc = nn.Sequential(
-            nn.Linear(out_dim, 512),
+            nn.Linear(64, 512),
             nn.ReLU(),
         )
-        # Output heads for each action dimension
+        # Q-Value for each action
         self.head1 = nn.Linear(512, env.single_action_space.nvec[0])
         self.head2 = nn.Linear(512, env.single_action_space.nvec[1])
 
@@ -193,7 +193,6 @@ if __name__ == "__main__":
         envs.single_action_space,
         device,
         optimize_memory_usage=True
-        # handle_timeout_termination=False,
     )
     start_time = time.time()
 
@@ -216,10 +215,10 @@ if __name__ == "__main__":
                     envs.single_action_space.nvec[1], size=args.num_envs)
             ], axis=-1)
         else:
-            q1, q2 = q_network(torch.as_tensor(
+            q_value1, q_value2 = q_network(torch.as_tensor(
                 obs, dtype=torch.long, device=device))
-            actions1 = torch.argmax(q1, dim=1).cpu().numpy()
-            actions2 = torch.argmax(q2, dim=1).cpu().numpy()
+            actions1 = torch.argmax(q_value1, dim=1).cpu().numpy()
+            actions2 = torch.argmax(q_value2, dim=1).cpu().numpy()
             actions = np.stack([actions1, actions2], axis=-1)
 
         # TRY NOT TO MODIFY: execute the game and log data.
@@ -260,7 +259,7 @@ if __name__ == "__main__":
                     if episode_return > best_return:
                         best_return = episode_return
                         torch.save(q_network.state_dict(),
-                                   f"best_model_DQN.pt")
+                                   f"DQN_best_model.pt")
 
                     recent_returns.append(episode_return)
                     if len(recent_returns) == n:
@@ -268,7 +267,7 @@ if __name__ == "__main__":
                         if avg_return > best_avg_return:
                             best_avg_return = avg_return
                             torch.save(q_network.state_dict(),
-                                       f"best_n_model_DQN.pt")
+                                       f"DQN_best_n_model.pt")
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
@@ -284,9 +283,9 @@ if __name__ == "__main__":
         if global_step > args.learning_starts:
             if global_step % args.train_frequency == 0:
                 data = rb.sample(args.batch_size)
-                q1, q2 = q_network(data.observations)
-                old_val1 = q1.gather(1, data.actions[:, [0]])
-                old_val2 = q2.gather(1, data.actions[:, [1]])
+                q_value1, q_value2 = q_network(data.observations)
+                old_val1 = q_value1.gather(1, data.actions[:, [0]])
+                old_val2 = q_value2.gather(1, data.actions[:, [1]])
                 with torch.no_grad():
                     target_q1, target_q2 = target_network(
                         data.next_observations)

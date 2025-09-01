@@ -1,4 +1,5 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/sac/#sac_ataripy
+from collections import deque
 import os
 import random
 import time
@@ -13,6 +14,7 @@ import torch.optim as optim
 import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
+from wandb import agent
 
 # from cleanrl_utils.atari_wrappers import (
 #     ClipRewardEnv,
@@ -28,7 +30,7 @@ import cleanrl.v17.fireboy_and_watergirl_sac_v17_multi
 
 @dataclass
 class Args:
-    exp_name: str = "SAC_atari_Multi_action_space"
+    exp_name: str = "SAC_atari_Multi_action_space_level8_exploration"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -244,6 +246,11 @@ if __name__ == "__main__":
     actor_optimizer = optim.Adam(
         list(actor.parameters()), lr=args.policy_lr, eps=1e-4)
 
+    n = 40  # window size for averaging
+    recent_returns = deque(maxlen=n)
+    best_avg_return = -float('inf')
+    best_return = -float('inf')
+
     # Automatic entropy tuning
     if args.autotune:
         # Calculate target entropy for each action dimension
@@ -292,7 +299,59 @@ if __name__ == "__main__":
                                   info["episode"]["r"], global_step)
                 writer.add_scalar("charts/episodic_length",
                                   info["episode"]["l"], global_step)
-                break
+                writer.add_scalar(
+                    "charts/stars_collected", info["stars_collected"], global_step)
+                writer.add_scalar(
+                    "charts/zero_reward", info["zero_reward"], global_step)
+                writer.add_scalar(
+                    "charts/unique_positions", info["unique_positions"], global_step)
+                writer.add_scalar(
+                    "charts/finished", info["finished"], global_step)
+                writer.add_scalar(
+                    "charts/players_at_door", info["players_at_door"], global_step)
+                writer.add_scalar(
+                    "charts/times_in_water", info["times_in_water"], global_step)
+                writer.add_scalar(
+                    "charts/times_in_fire", info["times_in_fire"], global_step)
+                writer.add_scalar(
+                    "charts/times_in_goo", info["times_in_goo"], global_step)
+
+                episode_return = info["episode"]["r"]
+
+                if episode_return > best_return:
+                    best_return = episode_return
+                    torch.save({
+                        'actor_state_dict': actor.state_dict(),
+                        'qf1_state_dict': qf1.state_dict(),
+                        'qf2_state_dict': qf2.state_dict(),
+                        'qf1_target_state_dict': qf1_target.state_dict(),
+                        'qf2_target_state_dict': qf2_target.state_dict(),
+                        'actor_optimizer_state_dict': actor_optimizer.state_dict(),
+                        'q_optimizer_state_dict': q_optimizer.state_dict(),
+                        'log_alpha': log_alpha if args.autotune else None,  # Save if using autotune
+                        # Save if using autotune
+                        'alpha_optimizer_state_dict': a_optimizer.state_dict() if args.autotune else None,
+                        'global_step': global_step,
+                    }, f"sac_multi_best_model.pt")
+                recent_returns.append(episode_return)
+                if len(recent_returns) == n:
+                    avg_return = sum(recent_returns) / n
+                    if avg_return > best_avg_return:
+                        best_avg_return = avg_return
+
+                    torch.save({
+                        'actor_state_dict': actor.state_dict(),
+                        'qf1_state_dict': qf1.state_dict(),
+                        'qf2_state_dict': qf2.state_dict(),
+                        'qf1_target_state_dict': qf1_target.state_dict(),
+                        'qf2_target_state_dict': qf2_target.state_dict(),
+                        'actor_optimizer_state_dict': actor_optimizer.state_dict(),
+                        'q_optimizer_state_dict': q_optimizer.state_dict(),
+                        'log_alpha': log_alpha if args.autotune else None,  # Save if using autotune
+                        # Save if using autotune
+                        'alpha_optimizer_state_dict': a_optimizer.state_dict() if args.autotune else None,
+                        'global_step': global_step,
+                    }, f"sac_multi_best_n_model.pt")
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
@@ -338,7 +397,6 @@ if __name__ == "__main__":
                         1, data.actions[:, dim_idx].long().unsqueeze(1)).squeeze()
                     qf1_loss += F.mse_loss(qf1_a_values, next_q_value)
                     qf2_loss += F.mse_loss(qf2_a_values, next_q_value)
-
                 qf_loss = qf1_loss + qf2_loss
 
                 q_optimizer.zero_grad()
@@ -352,7 +410,6 @@ if __name__ == "__main__":
                     qf2_values = qf2(data.observations)
                     min_qf_values = [torch.min(q1, q2)
                                      for q1, q2 in zip(qf1_values, qf2_values)]
-
                 actor_loss = 0
                 for dim_idx in range(len(actor.action_dims)):
                     actor_loss += (action_probs[dim_idx] *
