@@ -30,7 +30,7 @@ import cleanrl.v17.fireboy_and_watergirl_ppo_v17
 
 @dataclass
 class Args:
-    exp_name: str = "PPO_atari_v17_level8_exploration"
+    exp_name: str = "PPO_atari_v17_level8_plates_and_gates"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""

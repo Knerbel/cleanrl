@@ -28,7 +28,7 @@ import cleanrl.v17.fireboy_and_watergirl_sac_v17
 
 @dataclass
 class Args:
-    exp_name: str = "SAC_atari_single_action_space_level8_exploration"
+    exp_name: str = "SAC_atari_single_action_space_level8_obstacles"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""

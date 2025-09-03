@@ -104,7 +104,7 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Initialize game components
         self.level = random.choice(
-            ['level8_exploration'])
+            ['level8_obstacles'])
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
         self.gates: list[Gate] = []
         self.plates: list[Plate] = []
@@ -511,13 +511,13 @@ class FireboyAndWatergirlEnv(gym.Env):
         )
 
     def _compute_reward(self):
-        fb_reward = -0.005
-        wg_reward = -0.005
+        fb_reward = -0.0005
+        wg_reward = -0.0005
 
-        false_liquid_punishment = -0.2 / 100
-        exploration_reward = 0.01
-        star_reward = 5
-        finish_reward = 10
+        false_liquid_punishment = -0.01
+        exploration_reward = 0.02
+        star_reward = 0.25
+        finish_reward = 1
 
         level_data = self.board.get_level_data()
 
