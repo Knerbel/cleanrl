@@ -47,13 +47,13 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "FireboyAndWatergirl-ppo-v17"
     """the id of the environment"""
-    total_timesteps: int = 350_000
+    total_timesteps: int = 400_000
     """total timesteps of the experiments"""
     learning_rate: float = 1e-4
     """the learning rate of the optimizer"""
     num_envs: int = 1
     """the number of parallel game environments"""
-    buffer_size: int = 1000000
+    buffer_size: int = 200_000
     """the replay memory buffer size"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -67,9 +67,9 @@ class Args:
     """the starting epsilon for exploration"""
     end_e: float = 0.01
     """the ending epsilon for exploration"""
-    exploration_fraction: float = 0.20
+    exploration_fraction: float = 0.15
     """the fraction of `total-timesteps` it takes from start-e to go end-e"""
-    learning_starts: int = 80000
+    learning_starts: int = 40_000
     """timestep to start learning"""
     train_frequency: int = 4
     """the frequency of training"""
