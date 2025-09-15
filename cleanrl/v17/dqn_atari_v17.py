@@ -21,7 +21,7 @@ import cleanrl.v17.fireboy_and_watergirl_ppo_v17
 
 @dataclass
 class Args:
-    exp_name: str = "DQN_atari_v17_level8_exploration"
+    exp_name: str = "DQN_atari_v17_stars"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -47,7 +47,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "FireboyAndWatergirl-ppo-v17"
     """the id of the environment"""
-    total_timesteps: int = 10000000
+    total_timesteps: int = 350_000
     """total timesteps of the experiments"""
     learning_rate: float = 1e-4
     """the learning rate of the optimizer"""
@@ -67,7 +67,7 @@ class Args:
     """the starting epsilon for exploration"""
     end_e: float = 0.01
     """the ending epsilon for exploration"""
-    exploration_fraction: float = 0.10
+    exploration_fraction: float = 0.20
     """the fraction of `total-timesteps` it takes from start-e to go end-e"""
     learning_starts: int = 80000
     """timestep to start learning"""
@@ -179,9 +179,10 @@ if __name__ == "__main__":
          for i in range(args.num_envs)]
     )
     q_network = QNetwork(envs).to(device)
-    # agent.load_state_dict(torch.load(
-    #     "best_n_model.pt", map_location=device))
-    # agent.eval()  # agent.eval() doesnt do much
+
+    # pretrained_model_path = "DQN_best_model_stars.pt"
+    # q_network.load_state_dict(torch.load(
+    #     pretrained_model_path, map_location=device))
 
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
     target_network = QNetwork(envs).to(device)
@@ -207,6 +208,8 @@ if __name__ == "__main__":
         # ALGO LOGIC: put action logic here
         epsilon = linear_schedule(
             args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step)
+        # print(linear_schedule(
+        #     args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, 340000))
         if random.random() < epsilon:
             actions = np.stack([
                 np.random.randint(
