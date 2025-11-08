@@ -6,7 +6,6 @@ import time
 from dataclasses import dataclass
 
 import gymnasium as gym
-from matplotlib import pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -15,24 +14,12 @@ import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
-from stable_baselines3.common.atari_wrappers import (  # isort:skip
-    ClipRewardEnv,
-    EpisodicLifeEnv,
-    FireResetEnv,
-    MaxAndSkipEnv,
-    NoopResetEnv,
-)
+import cleanrl.v18.fireboy_and_watergirl_ppo_v18
 
-# Import your Fireboy and Watergirl environment to ensure it's registered
-
-import cleanrl.v16.fireboy_and_watergirl_ppo_v16
-
-
-# Generalization New smaller CNN
 
 @dataclass
 class Args:
-    exp_name: str = "PPO_atari_v16_level6e_generalization"
+    exp_name: str = "PPO_atari_v16_level8_exploration"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -50,13 +37,13 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v16'
+    env_id: str = 'FireboyAndWatergirl-ppo-v18'
     """the id of the environment"""
-    total_timesteps: int = 3000_000
+    total_timesteps: int = 10000000
     """total timesteps of the experiments"""
-    learning_rate: float = 1 * 2.5e-4
+    learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 8  # 1,2,4,8,12,16
+    num_envs: int = 1
     """the number of parallel game environments"""
     num_steps: int = 128 * 4
     """the number of steps to run in each environment per policy rollout"""
@@ -102,9 +89,6 @@ def make_env(env_id, idx, capture_video, run_name):
         else:
             env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        env = gym.wrappers.ResizeObservation(env, (20, 20))
-        # env = gym.wrappers.GrayScaleObservation(env)
-        env = gym.wrappers.FrameStack(env, 4)
         return env
 
     return thunk
@@ -119,37 +103,37 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
-        # For RGB input, input channels = 3 * 4 = 12 (4 stacked RGB frames)
         self.network = nn.Sequential(
-            # or 3 input channels if not stacking
-            nn.Conv2d(12, 32, 4, stride=1),
+            layer_init(nn.Conv2d(3, 32, 3, stride=1)),
             nn.ReLU(),
-            nn.Conv2d(32, 64, 4, stride=1),
+            layer_init(nn.Conv2d(32, 64, 3, stride=1)),
+            nn.ReLU(),
+            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(64 * 14 * 14, 128),  # adjust output size based on input
+            layer_init(nn.Linear(64 * 12 * 12, 512)),
             nn.ReLU(),
         )
-        self.actor = layer_init(nn.Linear(128, 8), std=0.01)
-        self.critic = layer_init(nn.Linear(128, 1), std=1)
+        # 8 total actions (4+4)
+        self.actor = layer_init(nn.Linear(512, 8), std=0.01)
+        self.critic = layer_init(nn.Linear(512, 1), std=1)
 
     def forward(self, x):
-        # x shape: (batch, 4, 20, 20, 3)
-        x = x.permute(0, 1, 4, 2, 3).reshape(
-            x.shape[0], -1, x.shape[2], x.shape[3])
+        # x shape: (batch, 18, 18, 3)
+        x = x.permute(0, 3, 1, 2)  # Change to (batch, 3, 18, 18)
         return self.network(x / 255.0)
 
-    def get_value(self, x: torch.Tensor):
-        # x shape: (batch, 4, 20, 20, 3) from env, need to reshape to (batch, 12, 20, 20)
-        x = x.permute(0, 1, 4, 2, 3).reshape(
-            x.shape[0], -1, x.shape[2], x.shape[3])
+    def get_value(self, x):
+        # x shape: (batch, 18, 18, 3)
+        x = x.permute(0, 3, 1, 2)  # Change to (batch, 3, 18, 18)
         return self.critic(self.network(x / 255.0))
 
-    def get_action_and_value(self, x: torch.Tensor, action=None):
-        x = x.permute(0, 1, 4, 2, 3).reshape(
-            x.shape[0], -1, x.shape[2], x.shape[3])
+    def get_action_and_value(self, x, action=None):
+        # x shape: (batch, 18, 18, 3)
+        x = x.permute(0, 3, 1, 2)  # Change to (batch, 3, 18, 18)
         hidden = self.network(x / 255.0)
         logits = self.actor(hidden)
+        # Split into two sets of 4 actions
         logits1, logits2 = logits.split(4, dim=-1)
         dist1 = Categorical(logits=logits1)
         dist2 = Categorical(logits=logits2)
@@ -170,10 +154,7 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-
-    # run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     run_name = f"{args.env_id}_{args.exp_name}_{args.seed}_{args.total_timesteps}_{args.learning_rate}_{args.num_envs}_{args.num_steps}_{args.anneal_lr}_{args.gamma}_{args.gae_lambda}_{args.num_minibatches}_{args.update_epochs}_{args.norm_adv}_{args.clip_coef}_{args.clip_vloss}_{args.ent_coef}_{args.vf_coef}_{args.max_grad_norm}_{args.target_kl}_{int(time.time())}"
-
     if args.track:
         import wandb
 
@@ -217,22 +198,9 @@ if __name__ == "__main__":
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
-    # dummy_input = torch.randn(1, 4, 23, 34, 3).to(device)
-    # torch.onnx.export(
-    #     agent,
-    #     dummy_input,
-    #     "ppo_agent.onnx",
-    #     input_names=["input"],
-    #     output_names=["output"],
-    #     opset_version=11
-    # )
-    # print("Exported model to ppo_agent.onnx")
-
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) +
                       envs.single_observation_space.shape).to(device)
-    # actions = torch.zeros((args.num_steps, args.num_envs) +
-    #                       envs.single_action_space.shape).to(device)
     actions = torch.zeros((args.num_steps, args.num_envs, 2)).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -245,7 +213,6 @@ if __name__ == "__main__":
     next_obs, _ = envs.reset(seed=args.seed)
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
-
     n = 40  # window size for averaging
     recent_returns = deque(maxlen=n)
     best_avg_return = -float('inf')
@@ -260,7 +227,6 @@ if __name__ == "__main__":
 
         for step in range(0, args.num_steps):
             global_step += args.num_envs
-
             obs[step] = next_obs
             dones[step] = next_done
 
@@ -275,9 +241,6 @@ if __name__ == "__main__":
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminations, truncations, infos = envs.step(
                 action.cpu().numpy())
-
-            # Add logging for exploration metrics
-            #
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(
@@ -313,7 +276,8 @@ if __name__ == "__main__":
 
                         if episode_return > best_return:
                             best_return = episode_return
-                            torch.save(agent.state_dict(), f"best_model.pt")
+                            torch.save(agent.state_dict(),
+                                       f"PPO_best_model.pt")
 
                         recent_returns.append(episode_return)
                         if len(recent_returns) == n:
@@ -321,12 +285,12 @@ if __name__ == "__main__":
                             if avg_return > best_avg_return:
                                 best_avg_return = avg_return
                                 torch.save(agent.state_dict(),
-                                           f"best_n_model.pt")
-                        if iteration % 5 == 0:
-                            print(
-                                f"Iteration {iteration}/{args.num_iterations}")
-                            torch.save(agent.state_dict(),
-                                       f"checkpoint {iteration}.pt")
+                                           f"PPO_best_n_model.pt")
+                        # if iteration % 5 == 0:
+                        #     print(
+                        #         f"Iteration {iteration}/{args.num_iterations}")
+                        #     torch.save(agent.state_dict(),
+                        #                f"checkpoint {iteration}.pt")
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -349,13 +313,13 @@ if __name__ == "__main__":
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
         b_logprobs = logprobs.reshape(-1)
-        b_actions = actions.reshape((-1, 2))  # Changed this line
+        b_actions = actions.reshape((-1, 2))
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
 
         # Optimizing the policy and value network
-        b_inds = np.arange(b_obs.shape[0])  # Changed this line
+        b_inds = np.arange(b_obs.shape[0])
         clipfracs = []
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
@@ -364,7 +328,7 @@ if __name__ == "__main__":
                 mb_inds = b_inds[start:end]
 
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(
-                    b_obs[mb_inds], b_actions[mb_inds]  # Changed this line
+                    b_obs[mb_inds], b_actions[mb_inds]
                 )
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()

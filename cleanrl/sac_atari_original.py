@@ -1,5 +1,4 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/sac/#sac_ataripy
-from collections import deque
 import os
 import random
 import time
@@ -15,21 +14,19 @@ import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
+from cleanrl_utils.atari_wrappers import (
+    ClipRewardEnv,
+    EpisodicLifeEnv,
+    FireResetEnv,
+    MaxAndSkipEnv,
+    NoopResetEnv,
+)
 from cleanrl_utils.buffers import ReplayBuffer
-
-import cleanrl.v17.fireboy_and_watergirl_sac_v17
-
-import cleanrl.v17.fireboy_and_watergirl_sac_v17_exploration
-import cleanrl.v17.fireboy_and_watergirl_sac_v17_stars
-import cleanrl.v17.fireboy_and_watergirl_sac_v17_obstacles
-import cleanrl.v17.fireboy_and_watergirl_sac_v17_plates_and_gates
-import cleanrl.v17.fireboy_and_watergirl_sac_v17_combined
-import cleanrl.v17.fireboy_and_watergirl_sac_v17_generalization
 
 
 @dataclass
 class Args:
-    exp_name: str = "SAC_atari_single_action_space_level8_combined_pretrained"
+    exp_name: str = os.path.basename(__file__)[: -len(".py")]
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -47,9 +44,9 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "FireboyAndWatergirl_sac-v17"
+    env_id: str = "BeamRiderNoFrameskip-v4"
     """the id of the environment"""
-    total_timesteps: int = 5_000_000
+    total_timesteps: int = 5000000
     """total timesteps of the experiments"""
     buffer_size: int = int(1e6)
     """the replay memory buffer size"""  # smaller than in original paper but evaluation is done only for 100k steps anyway
@@ -77,7 +74,7 @@ class Args:
     """coefficient for scaling the autotune entropy target"""
 
 
-def make_env(env_id, idx, capture_video, run_name):
+def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
@@ -85,9 +82,20 @@ def make_env(env_id, idx, capture_video, run_name):
         else:
             env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        # Since input is already (18, 18, 3), we don't need FrameStack
-        # env.action_space.seed(idx)
+
+        env = NoopResetEnv(env, noop_max=30)
+        env = MaxAndSkipEnv(env, skip=4)
+        env = EpisodicLifeEnv(env)
+        if "FIRE" in env.unwrapped.get_action_meanings():
+            env = FireResetEnv(env)
+        env = ClipRewardEnv(env)
+        env = gym.wrappers.ResizeObservation(env, (84, 84))
+        env = gym.wrappers.GrayScaleObservation(env)
+        env = gym.wrappers.FrameStack(env, 4)
+
+        env.action_space.seed(seed)
         return env
+
     return thunk
 
 
@@ -105,32 +113,23 @@ class SoftQNetwork(nn.Module):
     def __init__(self, envs):
         super().__init__()
         obs_shape = envs.single_observation_space.shape
-        # Adjust conv layers for (18, 18, 3) input
         self.conv = nn.Sequential(
-            layer_init(
-                nn.Conv2d(obs_shape[2], 32, kernel_size=3, stride=1, padding=1)),
+            layer_init(nn.Conv2d(obs_shape[0], 32, kernel_size=8, stride=4)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)),
+            layer_init(nn.Conv2d(32, 64, kernel_size=4, stride=2)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)),
-            nn.ReLU(),
+            layer_init(nn.Conv2d(64, 64, kernel_size=3, stride=1)),
             nn.Flatten(),
         )
 
         with torch.inference_mode():
-            # Need to permute the input tensor for Conv2d
-            test_input = torch.zeros(
-                1, obs_shape[2], obs_shape[0], obs_shape[1])
-            output_dim = self.conv(test_input).shape[1]
+            output_dim = self.conv(torch.zeros(1, *obs_shape)).shape[1]
 
         self.fc1 = layer_init(nn.Linear(output_dim, 512))
         self.fc_q = layer_init(nn.Linear(512, envs.single_action_space.n))
 
     def forward(self, x):
-        # Permute the input tensor from (B, H, W, C) to (B, C, H, W)
-        x = x.permute(0, 3, 1, 2)
-        x = x.float() / 255.0  # Normalize to [0,1]
-        x = F.relu(self.conv(x))
+        x = F.relu(self.conv(x / 255.0))
         x = F.relu(self.fc1(x))
         q_vals = self.fc_q(x)
         return q_vals
@@ -140,40 +139,33 @@ class Actor(nn.Module):
     def __init__(self, envs):
         super().__init__()
         obs_shape = envs.single_observation_space.shape
-        # Adjust conv layers for (18, 18, 3) input
         self.conv = nn.Sequential(
-            layer_init(
-                nn.Conv2d(obs_shape[2], 32, kernel_size=3, stride=1, padding=1)),
+            layer_init(nn.Conv2d(obs_shape[0], 32, kernel_size=8, stride=4)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)),
+            layer_init(nn.Conv2d(32, 64, kernel_size=4, stride=2)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)),
-            nn.ReLU(),
+            layer_init(nn.Conv2d(64, 64, kernel_size=3, stride=1)),
             nn.Flatten(),
         )
 
         with torch.inference_mode():
-            # Need to permute the input tensor for Conv2d
-            test_input = torch.zeros(
-                1, obs_shape[2], obs_shape[0], obs_shape[1])
-            output_dim = self.conv(test_input).shape[1]
+            output_dim = self.conv(torch.zeros(1, *obs_shape)).shape[1]
 
         self.fc1 = layer_init(nn.Linear(output_dim, 512))
         self.fc_logits = layer_init(nn.Linear(512, envs.single_action_space.n))
 
     def forward(self, x):
-        # Permute the input tensor from (B, H, W, C) to (B, C, H, W)
-        x = x.permute(0, 3, 1, 2)
-        x = x.float() / 255.0  # Normalize to [0,1]
         x = F.relu(self.conv(x))
         x = F.relu(self.fc1(x))
         logits = self.fc_logits(x)
+
         return logits
 
     def get_action(self, x):
-        logits = self(x)  # No /255.0 since input is 0-17
+        logits = self(x / 255.0)
         policy_dist = Categorical(logits=logits)
         action = policy_dist.sample()
+        # Action probabilities for calculating the adapted soft-Q loss
         action_probs = policy_dist.probs
         log_prob = F.log_softmax(logits, dim=1)
         return action, log_prob, action_probs
@@ -212,84 +204,39 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed, args.capture_video, run_name)])
+        [make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
     assert isinstance(envs.single_action_space,
                       gym.spaces.Discrete), "only discrete action space is supported"
 
-    PRETRAINED_MODEL_PATH = "C:\\Users\\knerb\\Documents\\Masterthesis\\final runs\\level8_combined\\SAC_single_action_space\\SAC_best_n_model.pt"
-    target_entropy = 0
-    if os.path.exists(PRETRAINED_MODEL_PATH):
-        print(f"Loading pretrained model from {PRETRAINED_MODEL_PATH}")
-        checkpoint = torch.load(PRETRAINED_MODEL_PATH)
+    actor = Actor(envs).to(device)
+    qf1 = SoftQNetwork(envs).to(device)
+    qf2 = SoftQNetwork(envs).to(device)
+    qf1_target = SoftQNetwork(envs).to(device)
+    qf2_target = SoftQNetwork(envs).to(device)
+    qf1_target.load_state_dict(qf1.state_dict())
+    qf2_target.load_state_dict(qf2.state_dict())
+    # TRY NOT TO MODIFY: eps=1e-4 increases numerical stability
+    q_optimizer = optim.Adam(list(qf1.parameters()) +
+                             list(qf2.parameters()), lr=args.q_lr, eps=1e-4)
+    actor_optimizer = optim.Adam(
+        list(actor.parameters()), lr=args.policy_lr, eps=1e-4)
 
-        actor = Actor(envs).to(device)
-        qf1 = SoftQNetwork(envs).to(device)
-        qf2 = SoftQNetwork(envs).to(device)
-        qf1_target = SoftQNetwork(envs).to(device)
-        qf2_target = SoftQNetwork(envs).to(device)
-
-        # Load state dicts
-        actor.load_state_dict(checkpoint['actor_state_dict'])
-        qf1.load_state_dict(checkpoint['qf1_state_dict'])
-        qf2.load_state_dict(checkpoint['qf2_state_dict'])
-        qf1_target.load_state_dict(checkpoint['qf1_target_state_dict'])
-        qf2_target.load_state_dict(checkpoint['qf2_target_state_dict'])
-
-        # Create and load optimizers
-        q_optimizer = optim.Adam(
-            list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr, eps=1e-4)
-        actor_optimizer = optim.Adam(
-            list(actor.parameters()), lr=args.policy_lr, eps=1e-4)
-
-        q_optimizer.load_state_dict(checkpoint['q_optimizer_state_dict'])
-        actor_optimizer.load_state_dict(
-            checkpoint['actor_optimizer_state_dict'])
-
-        # Load alpha-related parameters if using autotune
-        if args.autotune:
-            log_alpha = checkpoint['log_alpha']
-            alpha = log_alpha.exp().item()
-            a_optimizer = optim.Adam([log_alpha], lr=args.q_lr, eps=1e-4)
-            a_optimizer.load_state_dict(
-                checkpoint['alpha_optimizer_state_dict'])
-
-        print("Successfully loaded pretrained model")
+    # Automatic entropy tuning
+    if args.autotune:
+        target_entropy = -args.target_entropy_scale * \
+            torch.log(1 / torch.tensor(envs.single_action_space.n))
+        log_alpha = torch.zeros(1, requires_grad=True, device=device)
+        alpha = log_alpha.exp().item()
+        a_optimizer = optim.Adam([log_alpha], lr=args.q_lr, eps=1e-4)
     else:
-        print("Training from scratch")
-        actor = Actor(envs).to(device)
-        qf1 = SoftQNetwork(envs).to(device)
-        qf2 = SoftQNetwork(envs).to(device)
-        qf1_target = SoftQNetwork(envs).to(device)
-        qf2_target = SoftQNetwork(envs).to(device)
-
-        qf1_target.load_state_dict(qf1.state_dict())
-        qf2_target.load_state_dict(qf2.state_dict())
-        # TRY NOT TO MODIFY: eps=1e-4 increases numerical stability
-        q_optimizer = optim.Adam(list(qf1.parameters()) +
-                                 list(qf2.parameters()), lr=args.q_lr, eps=1e-4)
-        actor_optimizer = optim.Adam(
-            list(actor.parameters()), lr=args.policy_lr, eps=1e-4)
-
-        # Automatic entropy tuning
-        if args.autotune:
-            target_entropy = -args.target_entropy_scale * \
-                torch.log(1 / torch.tensor(envs.single_action_space.n))
-            log_alpha = torch.zeros(1, requires_grad=True, device=device)
-            alpha = log_alpha.exp().item()
-            a_optimizer = optim.Adam([log_alpha], lr=args.q_lr, eps=1e-4)
-        else:
-            alpha = args.alpha
-
-    n = 40  # window size for averaging
-    recent_returns = deque(maxlen=n)
-    best_avg_return = -float('inf')
-    best_return = -float('inf')
+        alpha = args.alpha
 
     rb = ReplayBuffer(
         args.buffer_size,
         envs.single_observation_space,
         envs.single_action_space,
-        device
+        device,
+        handle_timeout_termination=False,
     )
     start_time = time.time()
 
@@ -320,60 +267,6 @@ if __name__ == "__main__":
                                   info["episode"]["r"], global_step)
                 writer.add_scalar("charts/episodic_length",
                                   info["episode"]["l"], global_step)
-                writer.add_scalar(
-                    "charts/stars_collected", info["stars_collected"], global_step)
-                writer.add_scalar(
-                    "charts/zero_reward", info["zero_reward"], global_step)
-                writer.add_scalar(
-                    "charts/unique_positions", info["unique_positions"], global_step)
-                writer.add_scalar(
-                    "charts/finished", info["finished"], global_step)
-                writer.add_scalar(
-                    "charts/players_at_door", info["players_at_door"], global_step)
-                writer.add_scalar(
-                    "charts/times_in_water", info["times_in_water"], global_step)
-                writer.add_scalar(
-                    "charts/times_in_fire", info["times_in_fire"], global_step)
-                writer.add_scalar(
-                    "charts/times_in_goo", info["times_in_goo"], global_step)
-
-                episode_return = info["episode"]["r"]
-
-                if episode_return > best_return:
-                    best_return = episode_return
-                    torch.save({
-                        'actor_state_dict': actor.state_dict(),
-                        'qf1_state_dict': qf1.state_dict(),
-                        'qf2_state_dict': qf2.state_dict(),
-                        'qf1_target_state_dict': qf1_target.state_dict(),
-                        'qf2_target_state_dict': qf2_target.state_dict(),
-                        'actor_optimizer_state_dict': actor_optimizer.state_dict(),
-                        'q_optimizer_state_dict': q_optimizer.state_dict(),
-                        'log_alpha': log_alpha if args.autotune else None,  # Save if using autotune
-                        # Save if using autotune
-                        'alpha_optimizer_state_dict': a_optimizer.state_dict() if args.autotune else None,
-                        'global_step': global_step,
-                    }, f"sac_single_best_model.pt")
-
-                recent_returns.append(episode_return)
-                if len(recent_returns) == n:
-                    avg_return = sum(recent_returns) / n
-                    if avg_return > best_avg_return:
-                        best_avg_return = avg_return
-
-                    torch.save({
-                        'actor_state_dict': actor.state_dict(),
-                        'qf1_state_dict': qf1.state_dict(),
-                        'qf2_state_dict': qf2.state_dict(),
-                        'qf1_target_state_dict': qf1_target.state_dict(),
-                        'qf2_target_state_dict': qf2_target.state_dict(),
-                        'actor_optimizer_state_dict': actor_optimizer.state_dict(),
-                        'q_optimizer_state_dict': q_optimizer.state_dict(),
-                        'log_alpha': log_alpha if args.autotune else None,  # Save if using autotune
-                        # Save if using autotune
-                        'alpha_optimizer_state_dict': a_optimizer.state_dict() if args.autotune else None,
-                        'global_step': global_step,
-                    }, f"sac_single_best_n_model.pt")
                 break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
@@ -381,7 +274,7 @@ if __name__ == "__main__":
         for idx, trunc in enumerate(truncations):
             if trunc:
                 real_next_obs[idx] = infos["final_observation"][idx]
-        rb.add(obs, real_next_obs, actions, rewards, terminations)
+        rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs

@@ -25,14 +25,14 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 
 # Import your Fireboy and Watergirl environment to ensure it's registered
 
-import cleanrl.v16.fireboy_and_watergirl_ppo_v16
+import cleanrl.v15.fireboy_and_watergirl_ppo_v15
 
 
-# Generalization New smaller CNN
+# Generalization
 
 @dataclass
 class Args:
-    exp_name: str = "PPO_atari_v16_level6e_generalization"
+    exp_name: str = "PPO_atari_v15_new_CNN"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -50,7 +50,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v16'
+    env_id: str = 'FireboyAndWatergirl-ppo-v15'
     """the id of the environment"""
     total_timesteps: int = 3000_000
     """total timesteps of the experiments"""
@@ -102,9 +102,9 @@ def make_env(env_id, idx, capture_video, run_name):
         else:
             env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        env = gym.wrappers.ResizeObservation(env, (20, 20))
+        # env = gym.wrappers.ResizeObservation(env, (20, 20))
         # env = gym.wrappers.GrayScaleObservation(env)
-        env = gym.wrappers.FrameStack(env, 4)
+        # env = gym.wrappers.FrameStack(env, 4)
         return env
 
     return thunk
@@ -119,36 +119,55 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
-        # For RGB input, input channels = 3 * 4 = 12 (4 stacked RGB frames)
-        self.network = nn.Sequential(
-            # or 3 input channels if not stacking
-            nn.Conv2d(12, 32, 4, stride=1),
+        self.img_shape = (18, 18, 3)  # CHANGED from (4, 20, 20, 3)
+        self.pos_shape = (8,)
+        self.img_size = int(np.prod(self.img_shape))
+        self.pos_size = int(np.prod(self.pos_shape))
+        # CNN for image
+        self.cnn = nn.Sequential(
+            # CHANGED input channels from 12 to 3
+            layer_init(nn.Conv2d(3, 64, 3, stride=2)),
             nn.ReLU(),
-            nn.Conv2d(32, 64, 4, stride=1),
+            layer_init(nn.Conv2d(64, 128, 3, stride=2)),
+            nn.ReLU(),
+            layer_init(nn.Conv2d(128, 128, 3, stride=1)),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(64 * 14 * 14, 128),  # adjust output size based on input
+        )
+        # MLP for positions
+        self.mlp = nn.Sequential(
+            layer_init(nn.Linear(8, 32)),
+            nn.ReLU(),
+            layer_init(nn.Linear(32, 32)),
             nn.ReLU(),
         )
-        self.actor = layer_init(nn.Linear(128, 8), std=0.01)
-        self.critic = layer_init(nn.Linear(128, 1), std=1)
+        self.combined = nn.Sequential(
+            layer_init(nn.Linear(128 + 32, 512)),  # 128 from CNN, 32 from MLP
+            nn.ReLU(),
+        )
+        self.actor = layer_init(nn.Linear(512, 8), std=0.01)
+        self.critic = layer_init(nn.Linear(512, 1), std=1)
 
-    def forward(self, x):
-        # x shape: (batch, 4, 20, 20, 3)
-        x = x.permute(0, 1, 4, 2, 3).reshape(
-            x.shape[0], -1, x.shape[2], x.shape[3])
-        return self.network(x / 255.0)
+    def unpack_obs(self, obs):
+        img = obs[..., :self.img_size].reshape(-1, 18, 18, 3)  # CHANGED
+        pos = obs[..., self.img_size:].reshape(-1, 8)
+        img = torch.as_tensor(img, dtype=torch.float32, device=obs.device)
+        pos = torch.as_tensor(pos, dtype=torch.float32, device=obs.device)
+        return img, pos
 
-    def get_value(self, x: torch.Tensor):
-        # x shape: (batch, 4, 20, 20, 3) from env, need to reshape to (batch, 12, 20, 20)
-        x = x.permute(0, 1, 4, 2, 3).reshape(
-            x.shape[0], -1, x.shape[2], x.shape[3])
-        return self.critic(self.network(x / 255.0))
+    def forward(self, obs):
+        img, pos = self.unpack_obs(obs)
+        img = img.permute(0, 3, 1, 2)  # (batch, 3, 18, 18)
+        img_feat = self.cnn(img / 255.0)
+        pos_feat = self.mlp(pos)
+        feat = torch.cat([img_feat, pos_feat], dim=-1)
+        return self.combined(feat)
 
-    def get_action_and_value(self, x: torch.Tensor, action=None):
-        x = x.permute(0, 1, 4, 2, 3).reshape(
-            x.shape[0], -1, x.shape[2], x.shape[3])
-        hidden = self.network(x / 255.0)
+    def get_value(self, obs):
+        return self.critic(self.forward(obs))
+
+    def get_action_and_value(self, obs, action=None):
+        hidden = self.forward(obs)
         logits = self.actor(hidden)
         logits1, logits2 = logits.split(4, dim=-1)
         dist1 = Categorical(logits=logits1)
@@ -243,6 +262,7 @@ if __name__ == "__main__":
     global_step = 0
     start_time = time.time()
     next_obs, _ = envs.reset(seed=args.seed)
+    print("next_obs.shape:", next_obs.shape)
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 

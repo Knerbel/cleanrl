@@ -103,7 +103,7 @@ class FireboyAndWatergirlEnv(gym.Env):
 
         # Initialize game components
         self.level = random.choice(
-            ['level8_plates_and_gates'])
+            ['level8_combined'])
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
         self.gates: list[Gate] = []
         self.plates: list[Plate] = []
@@ -493,6 +493,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             # Map the action to Fireboy and Watergirl actions
             fireboy_action = action[0]
             watergirl_action = action[1]
+
             if fireboy_action == 0:
                 self.fire_boy.moving_left = False
                 self.fire_boy.moving_right = False
@@ -542,12 +543,12 @@ class FireboyAndWatergirlEnv(gym.Env):
         )
 
     def _compute_reward(self):
-        fb_reward = -0.005
-        wg_reward = -0.005
+        fb_reward = -0.0005
+        wg_reward = -0.0005
 
         false_liquid_punishment = -0.01
-        exploration_reward = 0.01
-        star_reward = 0.25
+        exploration_reward = 0.02
+        star_reward = 1
         finish_reward = 1
 
         level_data = self.board.get_level_data()
@@ -639,8 +640,7 @@ class FireboyAndWatergirlEnv(gym.Env):
         return fb_reward + wg_reward
 
     def _check_done(self):
-        return all(door.player_at_door for door in self.doors)
-        return all(star.is_collected for star in self.stars)
+        return all(door.player_at_door for door in self.doors) and all(star.is_collected for star in self.stars)
 
     def _check_player_dead(self):
         fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16

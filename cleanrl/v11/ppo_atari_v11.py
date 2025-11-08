@@ -30,11 +30,13 @@ import cleanrl.v9.fireboy_and_watergirl_ppo_v9
 import cleanrl.v9.fireboy_and_watergirl_ppo_v9_wo_observation_space
 import cleanrl.v10.fireboy_and_watergirl_ppo_v10
 import cleanrl.v11.fireboy_and_watergirl_ppo_v11
+import cleanrl.v11.fireboy_and_watergirl_ppo_v11b
+import cleanrl.v11.fireboy_and_watergirl_ppo_v11c
 
 
 @dataclass
 class Args:
-    exp_name: str = "PPO_atari_v11 pretrained before learning model"
+    exp_name: str = "PPO_atari_v11"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -52,7 +54,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v11'
+    env_id: str = 'FireboyAndWatergirl-ppo-v14'
     """the id of the environment"""
     total_timesteps: int = 2000_000
     """total timesteps of the experiments"""
@@ -60,7 +62,7 @@ class Args:
     """the learning rate of the optimizer"""
     num_envs: int = 8  # 1,2,4,8,12,16
     """the number of parallel game environments"""
-    num_steps: int = 128 * 4
+    num_steps: int = 128
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
@@ -222,9 +224,9 @@ if __name__ == "__main__":
     #                   gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs).to(device)
-    agent.load_state_dict(torch.load(
-        "checkpoint 50.pt", map_location=device))
-    agent.eval()  # agent.eval() doesnt do much
+    # agent.load_state_dict(torch.load(
+    #     "best_model.pt", map_location=device))
+    # agent.eval()  # agent.eval() doesnt do much
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 

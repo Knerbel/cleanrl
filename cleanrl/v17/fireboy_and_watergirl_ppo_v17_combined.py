@@ -1,5 +1,5 @@
-from typing import Set
 import gymnasium as gym
+import random
 from gymnasium import spaces
 from matplotlib import pyplot as plt
 import numpy as np
@@ -7,16 +7,15 @@ from gymnasium.envs.registration import register
 import cv2  # Add this import at the top with other imports
 import os
 
-from fireboy_and_watergirl_v2.board import Board
-from fireboy_and_watergirl_v2.box import Box
-from fireboy_and_watergirl_v2.character import FireBoy, WaterGirl
-from fireboy_and_watergirl_v2.doors import FireDoor, WaterDoor
-from fireboy_and_watergirl_v2.game import Game
-from fireboy_and_watergirl_v2.gate import Gate
-from fireboy_and_watergirl_v2.plate import Plate
-from fireboy_and_watergirl_v2.star import Star
+from fireboy_and_watergirl.board import Board
+from fireboy_and_watergirl.character import FireBoy, WaterGirl
+from fireboy_and_watergirl.doors import FireDoor, WaterDoor
+from fireboy_and_watergirl.game import Game
+from fireboy_and_watergirl.gate import Gate
+from fireboy_and_watergirl.plate import Plate
+from fireboy_and_watergirl.star import Star
 
-# v12  boxes
+# v17 New smaller CNN
 
 
 class FireboyAndWatergirlEnv(gym.Env):
@@ -31,12 +30,11 @@ class FireboyAndWatergirlEnv(gym.Env):
         # 4 actions for each character
         self.action_space = spaces.MultiDiscrete([4, 4])
         # Initialize game components
-        self.level = 'level0_boxes'
 
         self.game = Game()  # Instantiate the Game class
         self.board = None
-        self.fire_boy: FireBoy = None
-        self.water_girl: WaterGirl = None
+        self.fire_boy: FireBoy
+        self.water_girl: WaterGirl
         self.gates = None
         self.doors = None
 
@@ -49,12 +47,11 @@ class FireboyAndWatergirlEnv(gym.Env):
         self._load_level()
 
         self.steps = 0
-        self.max_steps = 128 * 5  # 400
-        self.envs = 1  # 8
+        self.max_steps = 128 * 4
+        self.envs = 100  # 8
 
-        self.level_height = 25 - 2  # Assuming 1-tile border on top and bottom
-        self.level_width = 34 - 2   # Assuming 1-tile border on left and right
-        self.num_channels = 3       # RGB channels
+        self.level_height = 20 - 2  # Assuming 1-tile border on top and bottom
+        self.level_width = 20 - 2   # Assuming 1-tile border on left and right
 
         self.fb_visited_positions = set()  # Add this line to store visited positions
         self.wg_visited_positions = set()  # Add this line to store visited positions
@@ -66,11 +63,12 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Define the flattened observation space for 3 stacked frames
         self.observation_space = spaces.Box(
             low=0,
-            high=255,
-            shape=(self.level_height, self.level_width, self.num_channels),
+            high=17,  # 17 different tile types
+            shape=(self.level_height, self.level_width),
             dtype=np.uint8
         )
 
+        self.cumulative_rewards = np.zeros(self.envs)
         self.video_scale = 16
         self.video_folder = "episode_videos"
         if not os.path.exists(self.video_folder):
@@ -104,42 +102,40 @@ class FireboyAndWatergirlEnv(gym.Env):
         #     level_data = [line.strip().split(',') for line in file.readlines()]
 
         # Initialize game components
+        self.level = random.choice(
+            ['level8_combined'])
         self.board = Board('./fireboy_and_watergirl/data/'+self.level+'.txt')
         self.gates: list[Gate] = []
         self.plates: list[Plate] = []
         self.doors: list[FireDoor | WaterDoor] = []
         self.stars: list[Star] = []
-        self.boxes: list[Box] = []
-
         # Parse the level data to dynamically set up components
         for y, row in enumerate(self.board.get_level_data()):
             for x, tile in enumerate(row):
+
                 if tile == 'f':  # Fireboy starting position
-                    self.fire_boy = FireBoy((x, y))
+                    self.fire_boy = FireBoy((x * 16, y * 16))
                 elif tile == 'w':  # Watergirl starting position
-                    self.water_girl = WaterGirl((x, y))
+                    self.water_girl = WaterGirl((x * 16, y * 16))
                 elif tile == 'A':  # Fire door
-                    self.doors.append(FireDoor((x, y)))
+                    self.doors.append(FireDoor((x * 16, y * 16)))
                 elif tile == 'B':  # Water door
-                    self.doors.append(WaterDoor((x, y)))
-                elif tile == 'D':  # Gate
-                    # Add a generic gate (you can customize this further)
-                    self.gates.append(Gate((x, y), "Foo"))
-                elif tile == 'P':  # Plate A
-                    # Add a plate that controls a gate
-                    self.plates.append(Plate((x, y), "Foo"))
-                # elif tile == 'A':  # Plate B
-                #     self.gates.append(
-                #         FireDoor((x, y), [(x, y)]))
-                # elif tile == 'B':  # Plate B
-                #     self.gates.append(
-                #         WaterDoor((x, y), [(x, y)]))
+                    self.doors.append(WaterDoor((x * 16, y * 16)))
+
+                elif tile == 'P':  # Fireboy Plate
+                    self.plates.append(Plate((x * 16, y * 16), "fire"))
+                elif tile == 'O':  # Watergirl Plate
+                    self.plates.append(Plate((x * 16, y * 16), "water"))
+
+                elif tile == 'D':  # Fireboy Gate
+                    self.gates.append(Gate((x * 16, y * 16), "fire"))
+                elif tile == 'E':  # Watergirl Gate
+                    self.gates.append(Gate((x * 16, y * 16), "water"))
+
                 elif tile == 'a':  # Gate A
-                    self.stars.append(Star([x, y], "fire"))
+                    self.stars.append(Star([x * 16, y * 16], "fire"))
                 elif tile == 'b':  # Gate B
-                    self.stars.append(Star([x, y], "water"))
-                elif tile == 'X':
-                    self.boxes.append(Box([x, y]))
+                    self.stars.append(Star([x * 16, y * 16], "water"))
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -147,20 +143,24 @@ class FireboyAndWatergirlEnv(gym.Env):
         self.fb_visited_positions.clear()  # Clear visited positions on reset
         self.wg_visited_positions.clear()  # Clear visited positions on reset
 
+        # Get the current env index and its cumulative reward
+        current_env = self.game.index
+        # self.cumulative_rewards[current_env] = 0
+
         # Start a new video for the new episode (temporary name)
         if self.record_video and self.games % self.video_recording_every == 0:
             if self.video_writer is not None:
                 self.video_writer.release()
-            # video_path = os.path.join(
-            #     self.video_folder,
-            #     f"Temp_{self.games}_{current_env}.mp4"
-            # )
-            # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            # self.video_writer = cv2.VideoWriter(
-            #     video_path, fourcc, 30.0,
-            #     (self.level_width * self.video_scale,
-            #      self.level_height * self.video_scale)
-            # )
+            video_path = os.path.join(
+                self.video_folder,
+                f"Temp_{self.games}_{current_env}.mp4"
+            )
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self.video_writer = cv2.VideoWriter(
+                video_path, fourcc, 30.0,
+                (self.level_width * self.video_scale,
+                 self.level_height * self.video_scale)
+            )
 
         self._load_level()
         self.state = self._get_state()
@@ -187,11 +187,19 @@ class FireboyAndWatergirlEnv(gym.Env):
         # Update the game state
         self.state = self._get_state()
 
-        doors_open = any(plate._is_pressed for plate in self.plates)
-        self.board.update_doors_solid_state(doors_open)
+        doors_d_open = any(
+            plate._is_pressed for plate in self.plates if plate._type == "fire")
+        doors_e_open = any(
+            plate._is_pressed for plate in self.plates if plate._type == "water")
+
+        self.board.update_doors_solid_state(doors_d_open, doors_e_open)
 
         # Compute reward
         reward = self._compute_reward()
+
+        # Update cumulative reward for current environment
+        current_env = self.game.index
+        # self.cumulative_rewards[current_env] += reward
 
         # Check if the game is done
         self.done = self._check_done()
@@ -210,10 +218,12 @@ class FireboyAndWatergirlEnv(gym.Env):
             "times_in_goo": self.times_in_goo,
         }
 
+        rgb_img = self.state_to_rgb(self.state)
+
         if self.record_video and self.games % self.video_recording_every == 0:
             # Capture frame for video
             if self.video_writer is not None:
-                frame = cv2.cvtColor(self.state, cv2.COLOR_RGB2BGR)
+                frame = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR)
                 frame = cv2.resize(frame, (self.level_width * self.video_scale, self.level_height * self.video_scale),
                                    interpolation=cv2.INTER_NEAREST)
                 self.video_writer.write(frame)
@@ -222,12 +232,13 @@ class FireboyAndWatergirlEnv(gym.Env):
             self.done = True
 
         if self.done:
+
             # Save the last frame as an image
             image_path = os.path.join(
                 self.image_folder,
-                f"episode_{self.games}_{self.game.index}_final.png"
+                f"episode_{self.games-1}_{current_env}_final.png"
             )
-            frame_bgr = cv2.cvtColor(self.state, cv2.COLOR_RGB2BGR)
+            frame_bgr = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR)
             frame_bgr = cv2.resize(
                 frame_bgr,
                 (self.level_width * self.video_scale,
@@ -237,6 +248,36 @@ class FireboyAndWatergirlEnv(gym.Env):
             cv2.imwrite(image_path, frame_bgr)
 
         return self.state, reward, self.done, False, info
+
+    def state_to_rgb(self, state):
+        """
+        Convert a tile index map (state) to an RGB image using color_mapping.
+        """
+        color_mapping = {
+            0: [255, 255, 255],
+            1: [50, 50, 50],
+            2: [255, 50, 0],
+            3: [0, 100, 255],
+            4: [50, 200, 50],
+            5: [255, 0, 0],
+            6: [0, 0, 255],
+            7: [255, 200, 0],
+            8: [0, 200, 255],
+            9: [200, 100, 0],
+            10: [0, 150, 200],
+            11: [150, 150, 150],
+            12: [150, 150, 150],
+            13: [200, 200, 100],
+            14: [200, 200, 100],
+            15: [180, 140, 20],
+            16: [173, 216, 230],
+            17: [255, 182, 193],
+        }
+        h, w = state.shape
+        rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
+        for idx, color in color_mapping.items():
+            rgb_image[state == idx] = color
+        return rgb_image
 
     def render(self, mode="human"):
         """
@@ -296,83 +337,100 @@ class FireboyAndWatergirlEnv(gym.Env):
         border_size = 1  # Assuming outer wall is 1 tile thick
         inner_height = len(level_data) - (2 * border_size)
         inner_width = len(level_data[0]) - (2 * border_size)
-        rgb_image = np.zeros((inner_height, inner_width, 3), dtype=np.uint8)
-        color_mapping = {
-            ' ': [255, 255, 255],
-            'S': [50, 50, 50],
-            'L': [255, 50, 0],
-            'W': [0, 100, 255],
-            'G': [50, 200, 50],
-            'f': [255, 0, 0],
-            'w': [0, 0, 255],
-            'a': [255, 200, 0],
-            'b': [0, 200, 255],
-            'A': [200, 100, 0],
-            'B': [0, 150, 200],
-            'P': [150, 150, 150],
-            'D': [200, 200, 100],
-            'D_open': [180, 140, 20],
-            'X': [120, 120, 120]
+        image = np.zeros((inner_height, inner_width), dtype=np.uint8)
+        tile_map = {
+            ' ': 0,
+            'S': 1,
+            'L': 2,
+            'W': 3,
+            'G': 4,
+            'f': 5,
+            'w': 6,
+            'a': 7,
+            'b': 8,
+            'A': 9,
+            'B': 10,
+            'P': 11,
+            'O': 12,
+            'D': 13,
+            'E': 14,
+            'D_open': 15
         }
-        light_blue = [173, 216, 230]
-        light_red = [255, 182, 193]
+        light_blue = 16
+        light_red = 17
 
         tile_array = np.array([[level_data[y][x] for x in range(border_size, len(level_data[0]) - border_size)]
                                for y in range(border_size, len(level_data) - border_size)])
-        for tile_char, color in color_mapping.items():
+        for tile_char, color in tile_map.items():
             mask = tile_array == tile_char
-            rgb_image[mask] = color
+            image[mask] = color
 
         # Remove static player tiles (they are drawn dynamically)
-        for tile_char in ['f', 'w', 'X']:
+        for tile_char in ['f', 'w']:
             mask = tile_array == tile_char
-            rgb_image[mask] = color_mapping[' ']
+            image[mask] = tile_map[' ']
 
         # VISUALIZE VISITED TILES AS MAGENTA
         for (fb_x, fb_y) in self.fb_visited_positions:
-            if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
-                rgb_image[fb_y, fb_x] = light_red
+            if 0 <= fb_y < image.shape[0] and 0 <= fb_x < image.shape[1]:
+                # Only color visited tile if it's not water, fire, or goo
+                if not (
+                    np.array_equal(image[fb_y, fb_x], tile_map['W']) or
+                    np.array_equal(image[fb_y, fb_x], tile_map['L']) or
+                    np.array_equal(image[fb_y, fb_x], tile_map['G'])
+                ):
+                    image[fb_y, fb_x] = light_red
         for (wg_x, wg_y) in self.wg_visited_positions:
-            if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
-                rgb_image[wg_y, wg_x] = light_blue
+            if 0 <= wg_y < image.shape[0] and 0 <= wg_x < image.shape[1]:
+                if not (
+                    np.array_equal(image[wg_y, wg_x], tile_map['W']) or
+                    np.array_equal(image[wg_y, wg_x], tile_map['L']) or
+                    np.array_equal(image[wg_y, wg_x], tile_map['G'])
+                ):
+                    image[wg_y, wg_x] = light_blue
 
         # Draw stars (vectorized)
         for star in self.stars:
             s_x, s_y = np.array(star.get_position()) // 16 - border_size
-            if 0 <= s_y < rgb_image.shape[0] and 0 <= s_x < rgb_image.shape[1]:
+            if 0 <= s_y < image.shape[0] and 0 <= s_x < image.shape[1]:
                 if not star.is_collected:
-                    rgb_image[s_y, s_x] = color_mapping['a' if star._player ==
-                                                        "fire" else 'b']
+                    image[s_y, s_x] = tile_map['a' if star._player ==
+                                               "fire" else 'b']
                 else:
-                    rgb_image[s_y, s_x] = color_mapping[' ']
+                    image[s_y, s_x] = tile_map[' ']
 
         # Draw gates ('D') as yellow only if no plate is pressed, else as empty
-        for y in range(rgb_image.shape[0]):
-            for x in range(rgb_image.shape[1]):
+        for y in range(image.shape[0]):
+            for x in range(image.shape[1]):
                 tile = tile_array[y, x]
                 if tile == 'D':
-                    if all(not plate._is_pressed for plate in self.plates):
-                        rgb_image[y, x] = color_mapping['D']
+                    if any(plate._is_pressed for plate in self.plates if plate._type == "fire"):
+                        image[y, x] = tile_map[' ']
                     else:
-                        rgb_image[y, x] = color_mapping[' ']
+                        image[y, x] = tile_map['D']
+                if tile == 'E':
+                    if any(plate._is_pressed for plate in self.plates if plate._type == "water"):
+                        image[y, x] = tile_map[' ']
+                    else:
+                        image[y, x] = tile_map['D']
 
         # Draw End doors
         for door in self.doors:
             d_x, d_y = np.array(door.get_position()) // 16 - border_size
-            if 0 <= d_y < rgb_image.shape[0] and 0 <= d_x < rgb_image.shape[1]:
-                if not door.reward_given:
-                    rgb_image[d_y][d_x] = color_mapping['A' if door._player ==
-                                                        "fire" else 'B']
-                else:
-                    rgb_image[d_y][d_x] = color_mapping[' ']
+            if 0 <= d_y < image.shape[0] and 0 <= d_x < image.shape[1]:
+                # if not door.reward_given:
+                image[d_y][d_x] = tile_map['A' if door._player ==
+                                           "fire" else 'B']
+                # else:
+                #     rgb_image[d_y][d_x] = color_mapping[' ']
 
         # Draw dynamic player positions
         if self.fire_boy:
             fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
             fb_x = int(fb_x-1)
             fb_y = int(fb_y-1)
-            if 0 <= fb_y < rgb_image.shape[0] and 0 <= fb_x < rgb_image.shape[1]:
-                rgb_image[fb_y, fb_x] = color_mapping['f']
+            if 0 <= fb_y < image.shape[0] and 0 <= fb_x < image.shape[1]:
+                image[fb_y, fb_x] = tile_map['f']
             else:
                 print(f"Fireboy position out of bounds: ({fb_x}, {fb_y})")
 
@@ -380,25 +438,18 @@ class FireboyAndWatergirlEnv(gym.Env):
             wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
             wg_x = int(wg_x-1)
             wg_y = int(wg_y-1)
-            if 0 <= wg_y < rgb_image.shape[0] and 0 <= wg_x < rgb_image.shape[1]:
-                rgb_image[wg_y, wg_x] = color_mapping['w']
+            if 0 <= wg_y < image.shape[0] and 0 <= wg_x < image.shape[1]:
+                image[wg_y, wg_x] = tile_map['w']
             else:
                 print(f"Watergirl position out of bounds: ({wg_x}, {wg_y})")
-
-        # --- Draw boxes at their current positions ---
-        for box in self.boxes:
-            box_x, box_y = np.array(box.get_position()) // 16
-            box_x = int((box.get_position()[0]//16) - 1)
-            box_y = int((box.get_position()[1]//16) - 1)
-            if 0 <= box_y < rgb_image.shape[0] and 0 <= box_x < rgb_image.shape[1]:
-                rgb_image[box_y, box_x] = color_mapping['X']
-
-        return rgb_image
+        return image
 
     def _apply_action(self, action):
         """
         Update the game state based on the discrete action.
         """
+
+        # print(action)
 
         # Check if action is an array-like (for MultiDiscrete) or a single int
         if isinstance(action, (list, tuple, np.ndarray)) and len(action) == 2:
@@ -408,6 +459,7 @@ class FireboyAndWatergirlEnv(gym.Env):
             # Map the action to Fireboy and Watergirl actions
             fireboy_action = action[0]
             watergirl_action = action[1]
+
             if fireboy_action == 0:
                 self.fire_boy.moving_left = False
                 self.fire_boy.moving_right = False
@@ -442,18 +494,12 @@ class FireboyAndWatergirlEnv(gym.Env):
                 self.water_girl.moving_right = False
                 self.water_girl.jumping = True
 
-            self.fire_boy.moving_left = False
-            self.fire_boy.moving_right = True
-            self.fire_boy.jumping = False
-            self.water_girl.moving_left = False
-            self.water_girl.moving_right = True
-            self.water_girl.jumping = False
         else:
             print('Invalid action format. Expected a list or tuple of length 2.')
             print(action)
 
         self.game.move_player(self.board, self.gates, [
-                              self.fire_boy, self.water_girl], self.boxes)
+                              self.fire_boy, self.water_girl])
         self.game.check_for_plates_press(
             self.plates, [self.fire_boy, self.water_girl])
         self.game.check_for_star_collected(
@@ -463,7 +509,13 @@ class FireboyAndWatergirlEnv(gym.Env):
         )
 
     def _compute_reward(self):
-        reward = -10  # Small negative reward for each step
+        fb_reward = -0.0005
+        wg_reward = -0.0005
+
+        false_liquid_punishment = -0.01
+        exploration_reward = 0.02
+        star_reward = 1
+        finish_reward = 1
 
         level_data = self.board.get_level_data()
 
@@ -481,11 +533,11 @@ class FireboyAndWatergirlEnv(gym.Env):
             if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
                 tile_fb = level_data[fb_y+1][fb_x+1]  # +1 for border
                 if tile_fb == 'W':  # Water or Goo
-                    reward -= 7.5
                     self.times_in_water += 1
+                    fb_reward += false_liquid_punishment
                 elif tile_fb == 'G':
-                    reward -= 7.5
                     self.times_in_goo += 1
+                    fb_reward += false_liquid_punishment
                 else:
                     self.fb_visited_positions.add((fb_x, fb_y))
 
@@ -493,61 +545,31 @@ class FireboyAndWatergirlEnv(gym.Env):
             if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
                 tile_wg = level_data[wg_y+1][wg_x+1]  # +1 for border
                 if tile_wg == 'L':  # Fire or Goo
-                    reward -= 7.5
                     self.times_in_fire += 1
+                    wg_reward += false_liquid_punishment
                 elif tile_wg == 'G':
-                    reward -= 7.5
                     self.times_in_goo += 1
+                    wg_reward += false_liquid_punishment
                 else:
                     self.wg_visited_positions.add((wg_x, wg_y))
 
         # Calculate exploration reward
         new_fb_positions = len(self.fb_visited_positions) - prev_fb_positions
         new_wg_positions = len(self.wg_visited_positions) - prev_wg_positions
-        exploration_reward = (new_fb_positions + new_wg_positions)
-        reward += exploration_reward * 5
-
-        # Rewards for passing through doors
-        # Reward for stepping on a 'D' (gate) tile
-        # if self.fire_boy:
-        #     if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
-        #         if level_data[fb_y+1][fb_x+1] == 'D':
-        #             reward += 500
-        # if self.water_girl:
-        #     if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
-        #         if level_data[wg_y+1][wg_x+1] == 'D':
-        #             reward += 500
-
-        # Reward for stepping on a plate
-
-        for door in self.plates:
-            plate_x, plate_y = door.get_position()
-            plate_x = int(plate_x // 16)
-            plate_y = int(plate_y // 16)
-            for player in [self.fire_boy, self.water_girl]:
-                player_x, player_y = player.get_position()
-                player_x = int(player_x // 16)
-                player_y = int(player_y // 16)
-                if player_x == plate_x and player_y == plate_y - 1:
-                    reward += 50 * door.reward_annealing
-                    door.reward_annealing *= 0.975
-
-        # if self.fire_boy:
-        #     if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
-        #         if level_data[fb_y+2][fb_x+1] == 'P':
-        #             reward += 50
-        # if self.water_girl:
-        #     if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
-        #         if level_data[wg_y+2][wg_x+1] == 'P':
-        #             reward += 50
+        fb_reward += new_fb_positions*exploration_reward
+        wg_reward += new_wg_positions*exploration_reward
 
         # Reward for collecting stars
         stars = np.array(self.stars)
         is_collected = np.array([star.is_collected for star in stars])
         reward_given = np.array([star.reward_given for star in stars])
+
         for i, star in enumerate(stars):
             if is_collected[i] and not reward_given[i]:
-                reward += 500
+                if star._player == 'fire':
+                    fb_reward += star_reward
+                elif star._player == 'water':
+                    wg_reward += star_reward
                 star.reward_given = True
 
         # Reward for goal
@@ -556,22 +578,52 @@ class FireboyAndWatergirlEnv(gym.Env):
         reward_given = np.array([door.reward_given for door in doors])
         for i, door in enumerate(doors):
             if player_at_door[i] and not reward_given[i]:
-                # reward += 4000
                 door.reward_given = True
-                print('PLAYER AT DOOR!')
+                # if door._player == 'fire':
+                #     # fb_reward += 150
+                #     print('FIREBOY AT DOOR!')
+                # if door._player == 'water':
+                #     # wg_reward += 150
+                #     print('WATERGIRL AT DOOR!')
+
         if all(player_at_door) and not all(reward_given):
-            reward += 16000  # or your chosen value
+            fb_reward += finish_reward
+            wg_reward += finish_reward
             for door in doors:
                 door.reward_given = True
-            print('BOTH PLAYERS AT DOORS!')
+            # print('BOTH PLAYERS AT DOORS!')
 
-        return reward
+        return fb_reward + wg_reward
 
     def _check_done(self):
+        # and all(star.is_collected for star in self.stars)
         return all(door.player_at_door for door in self.doors)
+
+    def _check_player_dead(self):
+        fb_x, fb_y = np.array(self.fire_boy.get_position()) // 16
+        fb_x, fb_y = int(fb_x-1), int(fb_y-1)
+        wg_x, wg_y = np.array(self.water_girl.get_position()) // 16
+        wg_x, wg_y = int(wg_x-1), int(wg_y-1)
+
+        level_data = self.board.get_level_data()
+
+        fireboy_dead = False
+        watergirl_dead = False
+
+        if 0 <= fb_y < self.level_height and 0 <= fb_x < self.level_width:
+            tile_fb = level_data[fb_y+1][fb_x+1]  # +1 for border
+            if tile_fb in ['W', 'G']:
+                fireboy_dead = True
+
+        if 0 <= wg_y < self.level_height and 0 <= wg_x < self.level_width:
+            tile_wg = level_data[wg_y+1][wg_x+1]  # +1 for border
+            if tile_wg in ['L', 'G']:
+                watergirl_dead = True
+
+        return fireboy_dead or watergirl_dead
 
 
 register(
-    id="FireboyAndWatergirl-ppo-v12",
-    entry_point="cleanrl.v12.fireboy_and_watergirl_ppo_v12:FireboyAndWatergirlEnv",
+    id="FireboyAndWatergirl-ppo-v17-combined",
+    entry_point="cleanrl.v17.fireboy_and_watergirl_ppo_v17_combined:FireboyAndWatergirlEnv",
 )

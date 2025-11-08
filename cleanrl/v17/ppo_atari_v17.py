@@ -15,22 +15,21 @@ import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
-from stable_baselines3.common.atari_wrappers import (  # isort:skip
-    ClipRewardEnv,
-    EpisodicLifeEnv,
-    FireResetEnv,
-    MaxAndSkipEnv,
-    NoopResetEnv,
-)
-
 import cleanrl.v17.fireboy_and_watergirl_ppo_v17
+
+import cleanrl.v17.fireboy_and_watergirl_ppo_v17_exploration
+import cleanrl.v17.fireboy_and_watergirl_ppo_v17_stars
+import cleanrl.v17.fireboy_and_watergirl_ppo_v17_obstacles
+import cleanrl.v17.fireboy_and_watergirl_ppo_v17_plates_and_gates
+import cleanrl.v17.fireboy_and_watergirl_ppo_v17_combined
+import cleanrl.v17.fireboy_and_watergirl_ppo_v17_generalization
 
 
 # Generalization
 
 @dataclass
 class Args:
-    exp_name: str = "PPO_atari_v17_level8_plates_and_gates"
+    exp_name: str = "PPO_atari_v17_level8_combined_pretrained"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -48,7 +47,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = 'FireboyAndWatergirl-ppo-v17'
+    env_id: str = 'FireboyAndWatergirl-ppo-v17-exploration'
     """the id of the environment"""
     total_timesteps: int = 10000000
     """total timesteps of the experiments"""
@@ -56,7 +55,7 @@ class Args:
     """the learning rate of the optimizer"""
     num_envs: int = 8
     """the number of parallel game environments"""
-    num_steps: int = 128 * 4
+    num_steps: int = 128 * 4 * 2
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
@@ -93,6 +92,11 @@ class Args:
 
 
 def make_env(env_id, idx, capture_video, run_name):
+    random.seed(idx)
+    np.random.seed(idx)
+    torch.manual_seed(idx)
+    torch.backends.cudnn.deterministic = True
+
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
@@ -150,19 +154,33 @@ class Agent(nn.Module):
         x = self.preprocess(x)
         return self.critic(self.network(x))
 
-    def get_action_and_value(self, x, action=None):
+    def get_action_and_value(self, x, action=None, deterministic=False):
         x = self.preprocess(x)
         hidden = self.network(x)
         logits = self.actor(hidden)
         logits1, logits2 = logits.split(4, dim=-1)
         probs1 = Categorical(logits=logits1)
         probs2 = Categorical(logits=logits2)
+
         if action is None:
-            action1 = probs1.sample()
-            action2 = probs2.sample()
+            if deterministic:
+
+                if random.random() < 1:  # 0.05:
+                    # Sample actions during evaluation
+                    action1 = probs1.sample()
+                    action2 = probs2.sample()
+                else:
+                    # Take the most probable action instead of sampling
+                    action1 = torch.argmax(logits1, dim=-1)
+                    action2 = torch.argmax(logits2, dim=-1)
+            else:
+                # Sample actions during training
+                action1 = probs1.sample()
+                action2 = probs2.sample()
             action = torch.stack([action1, action2], dim=-1)
         else:
             action1, action2 = action[..., 0], action[..., 1]
+
         logprob = probs1.log_prob(
             action[..., 0]) + probs2.log_prob(action[..., 1])
         entropy = probs1.entropy() + probs2.entropy()
@@ -211,7 +229,7 @@ if __name__ == "__main__":
 
     agent = Agent(envs).to(device)
     # agent.load_state_dict(torch.load(
-    #     "best_n_model.pt", map_location=device))
+    #     "PPO_best_model_exploration.pt", map_location=device))
     # agent.eval()  # agent.eval() doesnt do much
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)

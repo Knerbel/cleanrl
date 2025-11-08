@@ -4,17 +4,17 @@ S, ,f,w, , , , , , , , , , , , , , , ,S
 S, , , , , , , , , , , , , , , , , , ,S
 S,S,S,S,S,S,S,D,D,D,S,S,S,S,S,S,P,P,P,S
 S, , , , , , , , , , , , , , , , , , ,S
+S, ,A,B, , , , , , , , , , , , , , , ,S
+S, , , , , , , , , , , , , , , , , , ,S
+S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,P,P,P,S
+S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S
 S, , , , , , , , , , , , , , , , , , ,S
 S, , , , , , , , , , , , , , , , , , ,S
-S,P,P,P,S,S,S,S,S,S,S,S,G,G,G,S,S, , ,S
-S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S, , ,S
 S, , , , , , , , , , , , , , , , , , ,S
-S,a,b, , , , , , , , , , , , , , , , ,S
+S,S,S,S,S,S,S,S, , , , ,S,S,S,S,S,S,S,S
+S,S,S,S,S,S,S,S, , , , ,S,S,S,S,S,S,S,S
 S, , , , , , , , , , , , , , , , , , ,S
-S,S,S,S,S,S,S, , ,S,S,S,W,W,W,S,S,S,S,S
-S,S,S,S,S,S,S, , ,S,S,S,S,S,S,S,S,S,S,S
 S, , , , , , , , , , , , , , , , , , ,S
-S, ,B, , , , , , , , , , , , , , ,A, ,S
 S, , , , , , , , , , , , , , , , , , ,S
-S,S,S,S,S,S,G,G,G,S,S,S,L,L,L,S,S,S,S,S
+S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S
 S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S

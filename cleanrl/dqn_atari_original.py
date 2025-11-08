@@ -1,5 +1,4 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/dqn/#dqn_ataripy
-from collections import deque
 import os
 import random
 import time
@@ -14,20 +13,19 @@ import torch.optim as optim
 import tyro
 from torch.utils.tensorboard import SummaryWriter
 
+from cleanrl_utils.atari_wrappers import (
+    ClipRewardEnv,
+    EpisodicLifeEnv,
+    FireResetEnv,
+    MaxAndSkipEnv,
+    NoopResetEnv,
+)
 from cleanrl_utils.buffers import ReplayBuffer
-
-# import fireboy_and_watergirl_ppo_v17
-
-import cleanrl.v17.fireboy_and_watergirl_ppo_v17_exploration
-import cleanrl.v17.fireboy_and_watergirl_ppo_v17_stars
-import cleanrl.v17.fireboy_and_watergirl_ppo_v17_obstacles
-import cleanrl.v17.fireboy_and_watergirl_ppo_v17_plates_and_gates
-import cleanrl.v17.fireboy_and_watergirl_ppo_v17_combined
 
 
 @dataclass
 class Args:
-    exp_name: str = "DQN_atari_v17_level8_combined_pretrained"
+    exp_name: str = os.path.basename(__file__)[: -len(".py")]
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -51,15 +49,15 @@ class Args:
     """the user or org name of the model repository from the Hugging Face Hub"""
 
     # Algorithm specific arguments
-    env_id: str = "FireboyAndWatergirl-ppo-v17-exploration"
+    env_id: str = "BreakoutNoFrameskip-v4"
     """the id of the environment"""
-    total_timesteps: int = 500_000
+    total_timesteps: int = 10000000
     """total timesteps of the experiments"""
     learning_rate: float = 1e-4
     """the learning rate of the optimizer"""
     num_envs: int = 1
     """the number of parallel game environments"""
-    buffer_size: int = 200_000
+    buffer_size: int = 1000000
     """the replay memory buffer size"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -73,20 +71,15 @@ class Args:
     """the starting epsilon for exploration"""
     end_e: float = 0.01
     """the ending epsilon for exploration"""
-    exploration_fraction: float = 0.15
+    exploration_fraction: float = 0.10
     """the fraction of `total-timesteps` it takes from start-e to go end-e"""
-    learning_starts: int = 40_000
+    learning_starts: int = 80000
     """timestep to start learning"""
     train_frequency: int = 4
     """the frequency of training"""
 
 
-def make_env(env_id, idx, capture_video, run_name):
-    random.seed(idx)
-    np.random.seed(idx)
-    torch.manual_seed(idx)
-    torch.backends.cudnn.deterministic = True
-
+def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
@@ -94,9 +87,18 @@ def make_env(env_id, idx, capture_video, run_name):
         else:
             env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
-        env = gym.wrappers.ResizeObservation(env, (18, 18))
+
+        env = NoopResetEnv(env, noop_max=30)
+        env = MaxAndSkipEnv(env, skip=4)
+        env = EpisodicLifeEnv(env)
+        if "FIRE" in env.unwrapped.get_action_meanings():
+            env = FireResetEnv(env)
+        env = ClipRewardEnv(env)
+        env = gym.wrappers.ResizeObservation(env, (84, 84))
+        env = gym.wrappers.GrayScaleObservation(env)
         env = gym.wrappers.FrameStack(env, 4)
-        env.action_space.seed(idx)
+
+        env.action_space.seed(seed)
         return env
 
     return thunk
@@ -106,45 +108,21 @@ def make_env(env_id, idx, capture_video, run_name):
 class QNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
-        num_tile_types = int(env.single_observation_space.high.max()) + 1
-        embedding_dim = 8
-        frames = env.single_observation_space.shape[0]
-        self.embedding = nn.Embedding(num_tile_types, embedding_dim)
         self.network = nn.Sequential(
-            nn.Conv2d(frames * embedding_dim, 32, 3, stride=2),
+            nn.Conv2d(4, 32, 8, stride=4),
             nn.ReLU(),
-            nn.Conv2d(32, 64, 3, stride=2),
+            nn.Conv2d(32, 64, 4, stride=2),
             nn.ReLU(),
             nn.Conv2d(64, 64, 3, stride=1),
             nn.ReLU(),
             nn.Flatten(),
-        )
-        # dummy = torch.zeros(1, frames, height, width)
-        # dummy = self.embedding(dummy.long())
-        # dummy = dummy.permute(0, 1, 4, 2, 3).reshape(
-        #     1, frames * embedding_dim, height, width)
-        # out_dim = self.network(dummy).shape[1]
-        # print(out_dim)
-
-        # Feature extraction
-        self.fc = nn.Sequential(
-            nn.Linear(64, 512),
+            nn.Linear(3136, 512),
             nn.ReLU(),
+            nn.Linear(512, env.single_action_space.n),
         )
-        # Q-Value for each action
-        self.head1 = nn.Linear(512, env.single_action_space.nvec[0])
-        self.head2 = nn.Linear(512, env.single_action_space.nvec[1])
 
     def forward(self, x):
-        # x: (batch, 4, 18, 18)
-        x = self.embedding(x.long())
-        x = x.permute(0, 1, 4, 2, 3).reshape(
-            x.shape[0], -1, x.shape[2], x.shape[3])
-        x = self.network(x)
-        x = self.fc(x)
-        q1 = self.head1(x)
-        q2 = self.head2(x)
-        return q1, q2  # Each: (batch, 4)
+        return self.network(x / 255.0)
 
 
 def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
@@ -186,15 +164,13 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, args.seed + i, args.capture_video, run_name)
+        [make_env(args.env_id, args.seed + i, i, args.capture_video, run_name)
          for i in range(args.num_envs)]
     )
+    assert isinstance(envs.single_action_space,
+                      gym.spaces.Discrete), "only discrete action space is supported"
+
     q_network = QNetwork(envs).to(device)
-
-    pretrained_model_path = "DQN_best_model_combined.pt"
-    q_network.load_state_dict(torch.load(
-        pretrained_model_path, map_location=device))
-
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
     target_network = QNetwork(envs).to(device)
     target_network.load_state_dict(q_network.state_dict())
@@ -204,14 +180,10 @@ if __name__ == "__main__":
         envs.single_observation_space,
         envs.single_action_space,
         device,
-        optimize_memory_usage=True
+        optimize_memory_usage=True,
+        handle_timeout_termination=False,
     )
     start_time = time.time()
-
-    n = 40  # window size for averaging
-    recent_returns = deque(maxlen=n)
-    best_avg_return = -float('inf')
-    best_return = -float('inf')
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
@@ -219,21 +191,12 @@ if __name__ == "__main__":
         # ALGO LOGIC: put action logic here
         epsilon = linear_schedule(
             args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step)
-        # print(linear_schedule(
-        #     args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, 340000))
         if random.random() < epsilon:
-            actions = np.stack([
-                np.random.randint(
-                    envs.single_action_space.nvec[0], size=args.num_envs),
-                np.random.randint(
-                    envs.single_action_space.nvec[1], size=args.num_envs)
-            ], axis=-1)
+            actions = np.array([envs.single_action_space.sample()
+                               for _ in range(envs.num_envs)])
         else:
-            q_value1, q_value2 = q_network(torch.as_tensor(
-                obs, dtype=torch.long, device=device))
-            actions1 = torch.argmax(q_value1, dim=1).cpu().numpy()
-            actions2 = torch.argmax(q_value2, dim=1).cpu().numpy()
-            actions = np.stack([actions1, actions2], axis=-1)
+            q_values = q_network(torch.Tensor(obs).to(device))
+            actions = torch.argmax(q_values, dim=1).cpu().numpy()
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(
@@ -245,50 +208,17 @@ if __name__ == "__main__":
                 if info and "episode" in info:
                     print(
                         f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                    print("SPS:", int(global_step / (time.time() - start_time)))
-                    writer.add_scalar(
-                        "charts/SPS", int(global_step / (time.time() - start_time)), global_step)
                     writer.add_scalar("charts/episodic_return",
                                       info["episode"]["r"], global_step)
                     writer.add_scalar("charts/episodic_length",
                                       info["episode"]["l"], global_step)
-                    writer.add_scalar(
-                        "charts/stars_collected", info["stars_collected"], global_step)
-                    writer.add_scalar(
-                        "charts/zero_reward", info["zero_reward"], global_step)
-                    writer.add_scalar(
-                        "charts/unique_positions", info["unique_positions"], global_step)
-                    writer.add_scalar(
-                        "charts/finished", info["finished"], global_step)
-                    writer.add_scalar(
-                        "charts/players_at_door", info["players_at_door"], global_step)
-                    writer.add_scalar(
-                        "charts/times_in_water", info["times_in_water"], global_step)
-                    writer.add_scalar(
-                        "charts/times_in_fire", info["times_in_fire"], global_step)
-                    writer.add_scalar(
-                        "charts/times_in_goo", info["times_in_goo"], global_step)
-                    episode_return = info["episode"]["r"]
-
-                    if episode_return > best_return:
-                        best_return = episode_return
-                        torch.save(q_network.state_dict(),
-                                   f"DQN_best_model.pt")
-
-                    recent_returns.append(episode_return)
-                    if len(recent_returns) == n:
-                        avg_return = sum(recent_returns) / n
-                        if avg_return > best_avg_return:
-                            best_avg_return = avg_return
-                            torch.save(q_network.state_dict(),
-                                       f"DQN_best_n_model.pt")
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
         for idx, trunc in enumerate(truncations):
             if trunc:
                 real_next_obs[idx] = infos["final_observation"][idx]
-        rb.add(obs, real_next_obs, actions, rewards, terminations)
+        rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
@@ -297,18 +227,22 @@ if __name__ == "__main__":
         if global_step > args.learning_starts:
             if global_step % args.train_frequency == 0:
                 data = rb.sample(args.batch_size)
-                q_value1, q_value2 = q_network(data.observations)
-                old_val1 = q_value1.gather(1, data.actions[:, [0]])
-                old_val2 = q_value2.gather(1, data.actions[:, [1]])
                 with torch.no_grad():
-                    target_q1, target_q2 = target_network(
-                        data.next_observations)
-                    target_max1 = target_q1.max(dim=1)[0]
-                    target_max2 = target_q2.max(dim=1)[0]
-                    td_target = data.rewards.flatten() + args.gamma * (target_max1 +
-                                                                       target_max2) * (1 - data.dones.flatten())
-                loss = F.mse_loss(
-                    td_target, old_val1.squeeze() + old_val2.squeeze())
+                    target_max, _ = target_network(
+                        data.next_observations).max(dim=1)
+                    td_target = data.rewards.flatten() + args.gamma * target_max * \
+                        (1 - data.dones.flatten())
+                old_val = q_network(data.observations).gather(
+                    1, data.actions).squeeze()
+                loss = F.mse_loss(td_target, old_val)
+
+                if global_step % 100 == 0:
+                    writer.add_scalar("losses/td_loss", loss, global_step)
+                    writer.add_scalar("losses/q_values",
+                                      old_val.mean().item(), global_step)
+                    print("SPS:", int(global_step / (time.time() - start_time)))
+                    writer.add_scalar(
+                        "charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
                 # optimize the model
                 optimizer.zero_grad()

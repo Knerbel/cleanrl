@@ -32,7 +32,7 @@ import cleanrl.v14.fireboy_and_watergirl_ppo_v14
 
 @dataclass
 class Args:
-    exp_name: str = "PPO_atari_v14 level6_generalization"
+    exp_name: str = "PPO_atari_v14_level6e_generalization_pretrained"
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
@@ -52,7 +52,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = 'FireboyAndWatergirl-ppo-v14'
     """the id of the environment"""
-    total_timesteps: int = 2000_000
+    total_timesteps: int = 3000_000
     """total timesteps of the experiments"""
     learning_rate: float = 1 * 2.5e-4
     """the learning rate of the optimizer"""
@@ -216,7 +216,7 @@ if __name__ == "__main__":
 
     agent = Agent(envs).to(device)
     # agent.load_state_dict(torch.load(
-    #     "best_model.pt", map_location=device))
+    #     "best_model_6d.pt", map_location=device))
     # agent.eval()  # agent.eval() doesnt do much
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
